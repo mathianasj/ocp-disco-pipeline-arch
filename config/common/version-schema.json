@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Mirror Version Identifier",
+  "description": "Schema for disconnected mirror pipeline version identifiers",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^v\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d{3}-(scheduled|manual|event|incremental)$",
+      "description": "Version string in format v{YYYY.MM.DD}.{BUILD_NUMBER}-{TRIGGER_TYPE}",
+      "examples": [
+        "v2026.05.06.001-scheduled",
+        "v2026.05.06.002-manual",
+        "v2026.05.13.001-event"
+      ]
+    },
+    "components": {
+      "type": "object",
+      "properties": {
+        "year": {
+          "type": "integer",
+          "minimum": 2020,
+          "maximum": 2099
+        },
+        "month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "day": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31
+        },
+        "buildNumber": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999
+        },
+        "triggerType": {
+          "type": "string",
+          "enum": ["scheduled", "manual", "event", "incremental"]
+        }
+      },
+      "required": ["year", "month", "day", "buildNumber", "triggerType"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when version was created"
+    },
+    "baseVersion": {
+      "type": "string",
+      "pattern": "^v\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d{3}-(scheduled|manual|event|incremental)$",
+      "description": "For incremental versions, the base version it depends on"
+    }
+  },
+  "required": ["version", "components", "timestamp"]
+}

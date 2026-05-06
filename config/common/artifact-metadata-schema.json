@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Artifact Manifest Schema",
+  "description": "Schema for artifact manifest metadata in disconnected mirror pipeline",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "mirror.openshift.io/v1alpha1"
+    },
+    "kind": {
+      "type": "string",
+      "const": "ArtifactManifest"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^v\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d{3}-(scheduled|manual|event|incremental)$"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "creator": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": ["version", "timestamp", "creator"]
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "openshift": {
+          "type": "object",
+          "properties": {
+            "version": {"type": "string"},
+            "previousVersion": {"type": "string"},
+            "channel": {"type": "string"},
+            "architecture": {"type": "string"},
+            "images": {
+              "type": "object",
+              "properties": {
+                "count": {"type": "integer", "minimum": 0},
+                "totalSize": {"type": "string"},
+                "digest": {"type": "string"}
+              },
+              "required": ["count"]
+            }
+          }
+        },
+        "operators": {
+          "type": "object",
+          "properties": {
+            "catalogs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "version": {"type": "string"},
+                  "source": {"type": "string"},
+                  "packages": {"type": "integer", "minimum": 0},
+                  "digest": {"type": "string"}
+                },
+                "required": ["name"]
+              }
+            }
+          }
+        },
+        "helm": {
+          "type": "object",
+          "properties": {
+            "charts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "version": {"type": "string"},
+                  "repository": {"type": "string"},
+                  "digest": {"type": "string"}
+                },
+                "required": ["name", "version"]
+              }
+            }
+          }
+        },
+        "checksums": {
+          "type": "object",
+          "properties": {
+            "manifestDigest": {"type": "string"},
+            "archiveDigest": {"type": "string"},
+            "algorithm": {"type": "string", "enum": ["sha256", "sha512"]}
+          },
+          "required": ["algorithm"]
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "triggerType": {
+              "type": "string",
+              "enum": ["scheduled", "manual", "event"]
+            },
+            "source": {"type": "string"},
+            "incrementalFrom": {"type": "string"},
+            "incrementalType": {
+              "type": "string",
+              "enum": ["full", "incremental"]
+            }
+          },
+          "required": ["triggerType", "incrementalType"]
+        }
+      },
+      "required": ["metadata", "checksums"]
+    }
+  },
+  "required": ["apiVersion", "kind", "metadata", "spec"]
+}
