@@ -17,10 +17,24 @@ The solution is to set up a **standalone mirror registry on a bastion/helper nod
 
 ### Architecture for Bootstrap
 
-```
-[Physical Media] → [Bastion Node] → [Mirror Registry] → [OpenShift Install]
-                                           ↓
-                                    [New Cluster Nodes]
+```mermaid
+sequenceDiagram
+    participant Archive as Archive Package
+    participant Bastion as Bastion Node
+    participant Registry as Mirror Registry
+    participant Installer as OpenShift Installer
+    participant Cluster as New Cluster Nodes
+
+    Archive->>Bastion: 1. Transfer via physical media
+    Bastion->>Bastion: 2. Extract archive & verify checksums
+    Bastion->>Registry: 3. Install mirror-registry (Quay)
+    Bastion->>Registry: 4. Import all images (oc-mirror)
+    Bastion->>Installer: 5. Extract openshift-install binary
+    Installer->>Installer: 6. Create install-config.yaml
+    Installer->>Cluster: 7. Bootstrap cluster nodes
+    Cluster->>Registry: 8. Pull images during install
+    Cluster->>Cluster: 9. Form OpenShift cluster
+    Note over Cluster: OpenShift Cluster Running!
 ```
 
 ## Prerequisites
@@ -493,28 +507,24 @@ oc get mcp -w
 
 ## Workflow Summary
 
-```
-1. Prepare Bastion Node (RHEL 8/9)
-   ↓
-2. Transfer Mirror Archive to Bastion
-   ↓
-3. Install mirror-registry on Bastion
-   ↓
-4. Import All Images to Bastion Registry (oc-mirror)
-   ↓
-5. Extract openshift-install Binary
-   ↓
-6. Create install-config.yaml (with imageContentSources)
-   ↓
-7. Generate Ignition Configs
-   ↓
-8. Boot Cluster Nodes (Bootstrap, Masters, Workers)
-   ↓
-9. Monitor Installation (pulls from Bastion)
-   ↓
-10. Cluster Running! ✓
-    ↓
-11. (Optional) Move Registry to Cluster
+```mermaid
+flowchart TD
+    A[1. Prepare Bastion Node<br/>RHEL 8/9] --> B[2. Transfer Mirror Archive<br/>to Bastion]
+    B --> C[3. Install mirror-registry<br/>on Bastion]
+    C --> D[4. Import All Images<br/>oc-mirror to Bastion Registry]
+    D --> E[5. Extract openshift-install<br/>Binary]
+    E --> F[6. Create install-config.yaml<br/>with imageContentSources]
+    F --> G[7. Generate Ignition Configs]
+    G --> H[8. Boot Cluster Nodes<br/>Bootstrap, Masters, Workers]
+    H --> I[9. Monitor Installation<br/>pulls from Bastion]
+    I --> J[10. Cluster Running! ✓]
+    J --> K[11. Optional: Move Registry<br/>to Cluster]
+    
+    style A fill:#e1f5ff,stroke:#0066cc
+    style D fill:#fff4e1,stroke:#ff9900
+    style H fill:#ffe4e1,stroke:#cc0000
+    style J fill:#90EE90,stroke:#228B22,stroke-width:3px
+    style K fill:#f0f0f0,stroke:#666,stroke-dasharray: 5 5
 ```
 
 ## Troubleshooting Bootstrap Installation

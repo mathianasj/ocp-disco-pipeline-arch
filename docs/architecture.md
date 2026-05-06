@@ -35,108 +35,73 @@ This document provides a detailed architecture description for the disconnected 
 
 ### Three-Zone Architecture
 
+```mermaid
+graph TB
+    subgraph zone1["ZONE 1: CONNECTED ENVIRONMENT"]
+        direction TB
+        sources["External Sources<br/>• Red Hat CDN<br/>• Operator Hub<br/>• Helm Repositories<br/>• Cincinnati Update Service"]
+        
+        subgraph cluster1["OpenShift Cluster (Connected)"]
+            direction TB
+            
+            subgraph tekton1["OpenShift Pipelines"]
+                direction TB
+                collect["Collection Tasks<br/>• oc-mirror-collect<br/>• helm-collect<br/>• operator-catalog-mirror<br/>• artifact-collect"]
+                package["Packaging Tasks<br/>• generate-manifest<br/>• package-archive<br/>• checksum-verify"]
+                collect --> package
+            end
+            
+            registry1["Mirror Registry (Quay)<br/>• Staging for images<br/>• Red Hat structure"]
+            storage1["Persistent Storage<br/>• Mirror workspace (500GB+)<br/>• Package storage (300GB+)<br/>• Retention: last 3 versions"]
+            
+            tekton1 --> registry1
+            registry1 --> storage1
+        end
+        
+        archive1["Versioned Archive Package<br/>mirror-v2026.05.06.001.tar.gz<br/>• MANIFEST.yaml<br/>• CHECKSUMS.sha256<br/>• images/, operators/, artifacts/"]
+        
+        sources --> cluster1
+        storage1 --> archive1
+    end
+    
+    subgraph zone2["ZONE 2: PHYSICAL TRANSPORT"]
+        direction TB
+        transport["Physical Media Transfer<br/>• Encrypted USB drives<br/>• Chain of custody tracking<br/>• Checksum verification<br/>• Security procedures"]
+    end
+    
+    subgraph zone3["ZONE 3: DISCONNECTED ENVIRONMENT"]
+        direction TB
+        media["Physical Media Mount<br/>mirror-v2026.05.06.001.tar.gz"]
+        
+        subgraph cluster2["OpenShift Cluster (Disconnected)"]
+            direction TB
+            
+            subgraph tekton2["OpenShift Pipelines"]
+                direction TB
+                import["Import Tasks<br/>• verify-checksums<br/>• oc-mirror-import<br/>• helm-import<br/>• operator-catalog-import<br/>• validate-images"]
+            end
+            
+            registry2["Mirror Registry (Quay)<br/>• Local Red Hat mirror<br/>• Serves cluster and apps"]
+            consumption["Application Consumption<br/>• Cluster operators<br/>• Workloads<br/>• Helm charts<br/>• OLM operators"]
+            
+            tekton2 --> registry2
+            registry2 --> consumption
+        end
+        
+        media --> cluster2
+    end
+    
+    archive1 --> transport
+    transport --> media
+    
+    style zone1 fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
+    style zone2 fill:#f0f0f0,stroke:#666,stroke-width:2px
+    style zone3 fill:#fff4e1,stroke:#ff9900,stroke-width:2px
+    style transport fill:#ffcccc,stroke:#cc0000,stroke-width:2px
 ```
-┌───────────────────────────────────────────────────────────┐
-│ ZONE 1: CONNECTED ENVIRONMENT (Internet Access)           │
-│ ┌───────────────────────────────────────────────────────┐ │
-│ │ External Sources                                       │ │
-│ │ • Red Hat CDN (registry.redhat.io)                    │ │
-│ │ • Operator Hub (catalog.redhat.com)                   │ │
-│ │ • Helm Repositories                                   │ │
-│ │ • Cincinnati Update Service                           │ │
-│ └───────────────────────────────────────────────────────┘ │
-│                          ↓                                 │
-│ ┌───────────────────────────────────────────────────────┐ │
-│ │ OpenShift Cluster (Connected)                         │ │
-│ │                                                        │ │
-│ │ ┌─────────────────────────────────────────────────┐  │ │
-│ │ │ OpenShift Pipelines (Tekton)                     │  │ │
-│ │ │  ┌────────────────────────────────────────┐     │  │ │
-│ │ │  │ Collection Tasks                        │     │  │ │
-│ │ │  │ • oc-mirror-collect                     │     │  │ │
-│ │ │  │ • helm-collect (Phase 2)                │     │  │ │
-│ │ │  │ • operator-catalog-mirror               │     │  │ │
-│ │ │  │ • artifact-collect                      │     │  │ │
-│ │ │  └────────────────────────────────────────┘     │  │ │
-│ │ │           ↓                                      │  │ │
-│ │ │  ┌────────────────────────────────────────┐     │  │ │
-│ │ │  │ Packaging Tasks                         │     │  │ │
-│ │ │  │ • generate-manifest                     │     │  │ │
-│ │ │  │ • package-archive                       │     │  │ │
-│ │ │  │ • checksum-verify                       │     │  │ │
-│ │ │  └────────────────────────────────────────┘     │  │ │
-│ │ └─────────────────────────────────────────────────┘  │ │
-│ │            ↓                                          │ │
-│ │ ┌─────────────────────────────────────────────────┐  │ │
-│ │ │ Mirror Registry (Quay)                           │  │ │
-│ │ │ • Staging for collected images                   │  │ │
-│ │ │ • Repository structure matches Red Hat           │  │ │
-│ │ └─────────────────────────────────────────────────┘  │ │
-│ │            ↓                                          │ │
-│ │ ┌─────────────────────────────────────────────────┐  │ │
-│ │ │ Persistent Storage (PVCs)                        │  │ │
-│ │ │ • Mirror workspace (500GB+)                      │  │ │
-│ │ │ • Package archive storage (300GB+)               │  │ │
-│ │ │ • Retention: last 3 versions                     │  │ │
-│ │ └─────────────────────────────────────────────────┘  │ │
-│ └───────────────────────────────────────────────────────┘ │
-│                          ↓                                 │
-│ ┌───────────────────────────────────────────────────────┐ │
-│ │ Versioned Archive Package                             │ │
-│ │ mirror-v2026.05.06.001-scheduled.tar.gz              │ │
-│ │ • MANIFEST.yaml                                       │ │
-│ │ • CHECKSUMS.sha256                                    │ │
-│ │ • images/, helm-charts/, operators/, artifacts/       │ │
-│ └───────────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────────┘
-                          ↓
-┌───────────────────────────────────────────────────────────┐
-│ ZONE 2: PHYSICAL TRANSPORT                                │
-│                                                            │
-│ • Encrypted USB drives / approved physical media          │
-│ • Chain of custody tracking                               │
-│ • Checksum verification before transport                  │
-│ • Security procedures per organizational policy           │
-└───────────────────────────────────────────────────────────┘
-                          ↓
-┌───────────────────────────────────────────────────────────┐
-│ ZONE 3: DISCONNECTED ENVIRONMENT (Air-Gapped)             │
-│ ┌───────────────────────────────────────────────────────┐ │
-│ │ Physical Media Mount                                   │ │
-│ │ mirror-v2026.05.06.001-scheduled.tar.gz               │ │
-│ └───────────────────────────────────────────────────────┘ │
-│                          ↓                                 │
-│ ┌───────────────────────────────────────────────────────┐ │
-│ │ OpenShift Cluster (Disconnected)                       │ │
-│ │                                                        │ │
-│ │ ┌─────────────────────────────────────────────────┐  │ │
-│ │ │ OpenShift Pipelines (Tekton)                     │  │ │
-│ │ │  ┌────────────────────────────────────────┐     │  │ │
-│ │ │  │ Import Tasks                            │     │  │ │
-│ │ │  │ • verify-checksums                      │     │  │ │
-│ │ │  │ • oc-mirror-import                      │     │  │ │
-│ │ │  │ • helm-import (Phase 2)                 │     │  │ │
-│ │ │  │ • operator-catalog-import               │     │  │ │
-│ │ │  │ • validate-images                       │     │  │ │
-│ │ │  └────────────────────────────────────────┘     │  │ │
-│ │ └─────────────────────────────────────────────────┘  │ │
-│ │            ↓                                          │ │
-│ │ ┌─────────────────────────────────────────────────┐  │ │
-│ │ │ Mirror Registry (Quay)                           │  │ │
-│ │ │ • Local mirror of Red Hat content                │  │ │
-│ │ │ • Serves cluster and applications                │  │ │
-│ │ └─────────────────────────────────────────────────┘  │ │
-│ │            ↓                                          │ │
-│ │ ┌─────────────────────────────────────────────────┐  │ │
-│ │ │ Application Consumption                          │  │ │
-│ │ │ • Cluster operators pull from mirror             │  │ │
-│ │ │ • Workloads pull from mirror                     │  │ │
-│ │ │ • Helm charts accessible                         │  │ │
-│ │ │ • OLM operators installable                      │  │ │
-│ │ └─────────────────────────────────────────────────┘  │ │
-│ └───────────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────────┘
-```
+
+
+
 
 ## Component Design
 

@@ -31,43 +31,41 @@ Install a brand new OpenShift cluster in a disconnected environment starting fro
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    subgraph connected["CONNECTED CLUSTER"]
+        direction TB
+        cdn["Red Hat CDN & APIs"]
+        pipeline["Collection Pipeline<br/>• oc-mirror<br/>• Helm charts<br/>• Operator catalogs<br/>• Bootstrap artifacts ★"]
+        registry["Mirror Registry<br/>(Quay)"]
+        packaging["Packaging & Versioning"]
+        archive["Versioned Archive Package"]
+        
+        cdn --> pipeline
+        pipeline --> registry
+        registry --> packaging
+        packaging --> archive
+    end
+    
+    media["Physical Media Transfer"]
+    
+    subgraph disconnected["DISCONNECTED ENVIRONMENT"]
+        direction TB
+        target["Bastion Node (Bootstrap) ★<br/>OR<br/>Existing Cluster (Update)"]
+        import["Import Pipeline<br/>• Checksum verification<br/>• Registry population<br/>• Validation tests"]
+        
+        target --> import
+    end
+    
+    archive --> media
+    media --> target
+    
+    style connected fill:#e1f5ff
+    style disconnected fill:#fff4e1
+    style media fill:#f0f0f0
 ```
-┌──────────────────────────────────┐
-│  CONNECTED CLUSTER               │
-│  ┌────────────────────────────┐ │
-│  │ Red Hat CDN & APIs          │ │
-│  │         ↓                   │ │
-│  │ Collection Pipeline         │ │
-│  │  - oc-mirror                │ │
-│  │  - Helm charts              │ │
-│  │  - Operator catalogs        │ │
-│  │  - Bootstrap artifacts ★    │ │
-│  │         ↓                   │ │
-│  │ Mirror Registry (Quay)      │ │
-│  │         ↓                   │ │
-│  │ Packaging & Versioning      │ │
-│  └────────────────────────────┘ │
-│  Versioned Archive Package      │
-└──────────────────────────────────┘
-            ↓
-    [Physical Media]
-            ↓
-┌──────────────────────────────────┐
-│  DISCONNECTED ENVIRONMENT        │
-│  ┌────────────────────────────┐ │
-│  │ Bastion Node (Bootstrap) ★  │ │
-│  │  OR                         │ │
-│  │ Existing Cluster (Update)   │ │
-│  │         ↓                   │ │
-│  │ Import Pipeline             │ │
-│  │  - Checksum verification    │ │
-│  │  - Registry population      │ │
-│  │  - Validation tests         │ │
-│  └────────────────────────────┘ │
-└──────────────────────────────────┘
 
-★ New: Bootstrap installation support
-```
+**★ New: Bootstrap installation support**
 
 ## Quick Start
 

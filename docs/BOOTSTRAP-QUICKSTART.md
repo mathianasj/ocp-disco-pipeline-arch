@@ -10,8 +10,21 @@ You can't install OpenShift without pulling images from a registry, but you don'
 
 ## Architecture
 
-```
-[Archive] → [Bastion] → [Mirror Registry] → [Install OCP] → [New Cluster]
+```mermaid
+flowchart LR
+    A[Archive<br/>Package] --> B[Bastion<br/>Node]
+    B --> C[Install<br/>mirror-registry]
+    C --> D[Import<br/>Content]
+    D --> E[Extract<br/>Installer]
+    E --> F[Create<br/>install-config]
+    F --> G[Install<br/>OpenShift]
+    G --> H[Running<br/>Cluster ✓]
+    
+    style A fill:#e1f5ff,stroke:#0066cc
+    style H fill:#90EE90,stroke:#228B22,stroke-width:2px
+    style C fill:#fff4e1,stroke:#ff9900
+    style D fill:#fff4e1,stroke:#ff9900
+    style G fill:#ffe4e1,stroke:#cc0000
 ```
 
 ## Prerequisites
