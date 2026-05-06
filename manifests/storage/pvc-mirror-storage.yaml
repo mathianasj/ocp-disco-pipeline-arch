@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mirror-workspace-storage
+  namespace: mirror-pipeline
+  labels:
+    app: disconnected-mirror-pipeline
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Gi
+
+  # Uncomment and set appropriate storage class for your environment
+  # storageClassName: gp3-csi      # AWS EBS gp3
+  # storageClassName: managed-csi  # Azure managed disk
+  # storageClassName: standard     # GCP standard persistent disk
+  # storageClassName: ocs-storagecluster-ceph-rbd  # OpenShift Container Storage
+
+  volumeMode: Filesystem

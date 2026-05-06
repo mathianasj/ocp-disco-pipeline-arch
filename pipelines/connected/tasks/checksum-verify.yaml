@@ -1,0 +1,111 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: checksum-verify
+  labels:
+    app: disconnected-mirror-pipeline
+    component: checksum-verification
+spec:
+  description: |
+    Generates SHA256 checksums for all files in the mirror collection
+    and creates a CHECKSUMS.sha256 file for verification.
+
+  params:
+    - name: target-path
+      type: string
+      description: "Path to directory for which to generate checksums"
+      default: "/workspace"
+
+    - name: mode
+      type: string
+      description: "Mode: generate or verify"
+      default: "generate"
+
+  workspaces:
+    - name: workspace
+      description: "Workspace containing files to checksum"
+      mountPath: /workspace
+
+  results:
+    - name: checksum-file
+      description: "Path to generated checksum file"
+
+    - name: file-count
+      description: "Number of files checksummed"
+
+  steps:
+    - name: checksum
+      image: registry.redhat.io/ubi9/ubi-minimal:latest
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        echo "========================================="
+        echo "Checksum Task"
+        echo "========================================="
+        echo "Mode: $(params.mode)"
+        echo "Target: $(params.target-path)"
+        echo ""
+
+        # Install required tools
+        microdnf install -y findutils coreutils
+
+        cd "$(params.target-path)"
+
+        if [ "$(params.mode)" == "generate" ]; then
+          echo "Generating checksums..."
+
+          CHECKSUM_FILE="CHECKSUMS.sha256"
+
+          # Generate checksums for all files
+          # Exclude the checksum file itself and any hidden files
+          find . -type f ! -name "CHECKSUMS.sha256" ! -path "*/.*" -exec sha256sum {} \; > "$CHECKSUM_FILE"
+
+          FILE_COUNT=$(wc -l < "$CHECKSUM_FILE")
+
+          echo ""
+          echo "Generated checksums for $FILE_COUNT files"
+          echo "Checksum file: $(params.target-path)/$CHECKSUM_FILE"
+          echo ""
+          echo "Sample checksums (first 10):"
+          head -n 10 "$CHECKSUM_FILE"
+
+          # Write results
+          echo -n "$(params.target-path)/$CHECKSUM_FILE" > $(results.checksum-file.path)
+          echo -n "$FILE_COUNT" > $(results.file-count.path)
+
+        elif [ "$(params.mode)" == "verify" ]; then
+          echo "Verifying checksums..."
+
+          CHECKSUM_FILE="CHECKSUMS.sha256"
+
+          if [ ! -f "$CHECKSUM_FILE" ]; then
+            echo "ERROR: Checksum file not found: $CHECKSUM_FILE"
+            exit 1
+          fi
+
+          echo "Found checksum file with $(wc -l < $CHECKSUM_FILE) entries"
+          echo ""
+
+          # Verify checksums
+          if sha256sum -c "$CHECKSUM_FILE"; then
+            echo ""
+            echo "✓ All checksums verified successfully"
+            FILE_COUNT=$(wc -l < "$CHECKSUM_FILE")
+
+            echo -n "$(params.target-path)/$CHECKSUM_FILE" > $(results.checksum-file.path)
+            echo -n "$FILE_COUNT" > $(results.file-count.path)
+          else
+            echo ""
+            echo "✗ Checksum verification FAILED"
+            exit 1
+          fi
+
+        else
+          echo "ERROR: Unknown mode: $(params.mode)"
+          echo "Valid modes: generate, verify"
+          exit 1
+        fi
+
+        echo ""
+        echo "Checksum task complete"

@@ -1,0 +1,112 @@
+apiVersion: mirror.openshift.io/v1alpha1
+kind: ArtifactManifest
+metadata:
+  # Version identifier in format: v{YYYY.MM.DD}.{BUILD_NUMBER}-{TRIGGER_TYPE}
+  version: ""
+  timestamp: ""
+  creator: "disconnected-mirror-pipeline"
+  description: ""
+
+spec:
+  # OpenShift platform images
+  openshift:
+    version: ""
+    previousVersion: ""
+    channel: ""
+    architecture: "amd64"
+    images:
+      count: 0
+      totalSize: ""
+      digest: ""
+    mirrorSource: "registry.redhat.io"
+
+  # Operator catalogs and bundles
+  operators:
+    catalogs: []
+    # Example catalog entry:
+    # - name: "redhat-operators"
+    #   version: "4.15"
+    #   source: "registry.redhat.io/redhat/redhat-operator-index:v4.15"
+    #   packages: 0
+    #   digest: ""
+    #   operators: []
+    #     # Example operator entry:
+    #     # - name: "openshift-pipelines-operator-rh"
+    #       version: ""
+    #       channel: "latest"
+    #       bundles: []
+
+  # Helm charts
+  helm:
+    charts: []
+    # Example chart entry:
+    # - name: "nginx-ingress"
+    #   version: "1.2.3"
+    #   repository: "https://charts.bitnami.com/bitnami"
+    #   digest: ""
+    #   size: ""
+
+  # Generic artifacts (binaries, configs, etc.)
+  artifacts:
+    binaries: []
+    # Example binary entry:
+    # - name: "oc"
+    #   version: "4.15.12"
+    #   platform: "linux-amd64"
+    #   sha256: ""
+    #   size: ""
+    #   source: "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.15.12/openshift-client-linux-4.15.12.tar.gz"
+
+    configs: []
+    # Example config entry:
+    # - name: "machineconfig-sample"
+    #   path: "artifacts/configs/machineconfig-sample.yaml"
+    #   sha256: ""
+
+    documentation: []
+    # Example documentation entry:
+    # - name: "README"
+    #   path: "artifacts/docs/README.md"
+    #   sha256: ""
+
+  # Checksums and validation
+  checksums:
+    manifestDigest: ""
+    archiveDigest: ""
+    algorithm: "sha256"
+
+  # Metadata
+  metadata:
+    triggerType: ""  # scheduled | manual | event
+    source: "red-hat-cdn"
+    incrementalFrom: ""  # For incremental updates, reference to base version
+    incrementalType: ""  # full | incremental
+    collectionDuration: ""
+    archiveSize: ""
+    compressionRatio: ""
+
+  # Collection configuration snapshot
+  configuration:
+    imagesetConfig:
+      version: ""
+      digest: ""
+    helmRepos:
+      version: ""
+      digest: ""
+
+status:
+  phase: ""  # collecting | packaging | ready | imported | failed
+  conditions: []
+  # Example condition:
+  # - type: "Ready"
+  #   status: "True"
+  #   lastTransitionTime: ""
+  #   reason: "CollectionComplete"
+  #   message: "All artifacts collected and packaged successfully"
+
+  collectionTimestamp: ""
+  packageTimestamp: ""
+  importTimestamp: ""  # Set on disconnected side
+
+  errors: []
+  warnings: []

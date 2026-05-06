@@ -1,0 +1,77 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: version-tag
+  labels:
+    app: disconnected-mirror-pipeline
+    component: version-generator
+spec:
+  description: |
+    Generates a version identifier for the mirror collection.
+    Format: v{YYYY.MM.DD}.{BUILD_NUMBER}-{TRIGGER_TYPE}
+
+  params:
+    - name: trigger-type
+      type: string
+      description: "Type of trigger: scheduled, manual, event, or incremental"
+      default: "manual"
+
+    - name: base-version
+      type: string
+      description: "Base version for incremental builds (optional)"
+      default: ""
+
+  results:
+    - name: version
+      description: "Generated version identifier"
+
+    - name: timestamp
+      description: "ISO 8601 timestamp"
+
+    - name: build-number
+      description: "Build number for the day"
+
+  steps:
+    - name: generate-version
+      image: registry.redhat.io/ubi9/ubi-minimal:latest
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        # Install required tools
+        microdnf install -y findutils
+
+        # Get current date components
+        YEAR=$(date +%Y)
+        MONTH=$(date +%m)
+        DAY=$(date +%d)
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        # Determine build number for today
+        # Check existing versions in the workspace (if any)
+        BUILD_NUMBER=1
+
+        # In production, this would query a version registry or ConfigMap
+        # For now, we'll use a simple incrementing number
+        # TODO: Implement proper build number tracking using ConfigMap
+
+        # Format build number with leading zeros (001, 002, etc.)
+        BUILD_NUM_FORMATTED=$(printf "%03d" $BUILD_NUMBER)
+
+        # Construct version string
+        VERSION="v${YEAR}.${MONTH}.${DAY}.${BUILD_NUM_FORMATTED}-$(params.trigger-type)"
+
+        echo "Generated version: $VERSION"
+        echo "Timestamp: $TIMESTAMP"
+        echo "Build number: $BUILD_NUM_FORMATTED"
+
+        # Write results
+        echo -n "$VERSION" | tee $(results.version.path)
+        echo -n "$TIMESTAMP" | tee $(results.timestamp.path)
+        echo -n "$BUILD_NUM_FORMATTED" | tee $(results.build-number.path)
+
+        # If this is an incremental build, validate base version
+        if [ -n "$(params.base-version)" ]; then
+          echo "Incremental build based on: $(params.base-version)"
+          # TODO: Validate that base version exists
+        fi

@@ -1,0 +1,203 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: mirror-collection-pipeline
+  labels:
+    app: disconnected-mirror-pipeline
+    component: collection
+spec:
+  description: |
+    Main pipeline for collecting OpenShift artifacts (images, operators, Helm charts)
+    and packaging them for transport to disconnected environments.
+
+  params:
+    - name: trigger-type
+      type: string
+      description: "Type of trigger: scheduled, manual, event, or incremental"
+      default: "manual"
+
+    - name: base-version
+      type: string
+      description: "Base version for incremental builds (leave empty for full mirror)"
+      default: ""
+
+    - name: compression
+      type: string
+      description: "Archive compression: gzip, zstd, or none"
+      default: "gzip"
+
+    - name: imageset-config-path
+      type: string
+      description: "Path to ImageSetConfiguration file"
+      default: "/config/imageset-config.yaml"
+
+  workspaces:
+    - name: mirror-workspace
+      description: "Workspace for oc-mirror collection and staging"
+
+    - name: package-workspace
+      description: "Workspace for final package archives"
+
+    - name: config
+      description: "Configuration files (imageset-config, helm-repos, etc.)"
+
+    - name: registry-creds
+      description: "Registry pull/push credentials"
+
+    - name: templates
+      description: "Manifest and metadata templates"
+      optional: true
+
+  tasks:
+    # Task 1: Generate version identifier
+    - name: generate-version
+      taskRef:
+        name: version-tag
+      params:
+        - name: trigger-type
+          value: $(params.trigger-type)
+        - name: base-version
+          value: $(params.base-version)
+
+    # Task 2: Collect OpenShift images with oc-mirror
+    - name: oc-mirror-collect
+      taskRef:
+        name: oc-mirror-collect
+      runAfter:
+        - generate-version
+      params:
+        - name: config-path
+          value: $(params.imageset-config-path)
+        - name: incremental
+          value: "$(params.base-version)"  # Empty string = false, any value = true
+      workspaces:
+        - name: workspace
+          workspace: mirror-workspace
+        - name: config
+          workspace: config
+        - name: registry-creds
+          workspace: registry-creds
+
+    # Task 2b: Collect generic artifacts (runs in parallel with oc-mirror)
+    - name: artifact-collect
+      taskRef:
+        name: artifact-collect
+      runAfter:
+        - generate-version
+      params:
+        - name: ocp-version
+          value: "4.15.12"  # TODO: Extract from imageset-config
+        - name: include-bootstrap-tools
+          value: "true"
+      workspaces:
+        - name: workspace
+          workspace: mirror-workspace
+
+    # Task 3: Generate manifest
+    - name: generate-manifest
+      taskRef:
+        name: generate-manifest
+      runAfter:
+        - oc-mirror-collect
+        - artifact-collect
+      params:
+        - name: version
+          value: $(tasks.generate-version.results.version)
+        - name: timestamp
+          value: $(tasks.generate-version.results.timestamp)
+        - name: trigger-type
+          value: $(params.trigger-type)
+        - name: image-count
+          value: $(tasks.oc-mirror-collect.results.image-count)
+        - name: total-size
+          value: $(tasks.oc-mirror-collect.results.total-size)
+        - name: base-version
+          value: $(params.base-version)
+      workspaces:
+        - name: workspace
+          workspace: mirror-workspace
+        - name: templates
+          workspace: templates
+
+    # Task 4: Package into archive
+    - name: package-archive
+      taskRef:
+        name: package-archive
+      runAfter:
+        - generate-manifest
+      params:
+        - name: version
+          value: $(tasks.generate-version.results.version)
+        - name: manifest-path
+          value: $(tasks.generate-manifest.results.manifest-path)
+        - name: compression
+          value: $(params.compression)
+      workspaces:
+        - name: source
+          workspace: mirror-workspace
+        - name: destination
+          workspace: package-workspace
+
+    # Task 5: Verify package checksums
+    - name: verify-package
+      taskRef:
+        name: checksum-verify
+      runAfter:
+        - package-archive
+      params:
+        - name: target-path
+          value: /workspace/packages/mirror-$(tasks.generate-version.results.version)
+        - name: mode
+          value: "verify"
+      workspaces:
+        - name: workspace
+          workspace: package-workspace
+
+  results:
+    - name: version
+      description: "Version identifier of the generated package"
+      value: $(tasks.generate-version.results.version)
+
+    - name: archive-path
+      description: "Path to the generated archive"
+      value: $(tasks.package-archive.results.archive-path)
+
+    - name: archive-size
+      description: "Size of the generated archive"
+      value: $(tasks.package-archive.results.archive-size)
+
+    - name: archive-checksum
+      description: "SHA256 checksum of the archive"
+      value: $(tasks.package-archive.results.archive-checksum)
+
+    - name: image-count
+      description: "Number of images collected"
+      value: $(tasks.oc-mirror-collect.results.image-count)
+
+  finally:
+    # Cleanup or notification tasks can be added here
+    - name: report-status
+      params:
+        - name: pipeline-status
+          value: "$(tasks.status)"
+        - name: version
+          value: "$(tasks.generate-version.results.version)"
+      taskSpec:
+        params:
+          - name: pipeline-status
+          - name: version
+        steps:
+          - name: report
+            image: registry.redhat.io/ubi9/ubi-minimal:latest
+            script: |
+              #!/bin/bash
+              echo "========================================="
+              echo "Pipeline Execution Summary"
+              echo "========================================="
+              echo "Version: $(params.version)"
+              echo "Status: $(params.pipeline-status)"
+              echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              echo "========================================="
+
+              # In production, this could send notifications to Slack, email, etc.
+              # For now, just log the summary

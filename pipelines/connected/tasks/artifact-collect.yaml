@@ -1,0 +1,188 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: artifact-collect
+  labels:
+    app: disconnected-mirror-pipeline
+    component: artifact-collection
+spec:
+  description: |
+    Collects generic artifacts needed for disconnected operations:
+    - OpenShift installer binary (openshift-install)
+    - OpenShift CLI tools (oc, kubectl)
+    - oc-mirror binary
+    - mirror-registry tool (for bootstrap installations)
+    - Helm CLI
+    - Additional utilities
+
+  params:
+    - name: ocp-version
+      type: string
+      description: "OpenShift version to download tools for (e.g., 4.15.12)"
+      default: "4.15.12"
+
+    - name: include-bootstrap-tools
+      type: string
+      description: "Include tools for bootstrap installation (true/false)"
+      default: "true"
+
+  workspaces:
+    - name: workspace
+      description: "Workspace for artifact storage"
+      mountPath: /workspace
+
+  results:
+    - name: artifact-count
+      description: "Number of artifacts collected"
+
+  steps:
+    - name: collect-artifacts
+      image: registry.redhat.io/ubi9/ubi:latest
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        echo "========================================="
+        echo "Artifact Collection Task"
+        echo "========================================="
+        echo "OCP Version: $(params.ocp-version)"
+        echo "Include Bootstrap: $(params.include-bootstrap-tools)"
+        echo ""
+
+        # Create artifact directories
+        ARTIFACT_DIR="/workspace/artifacts"
+        mkdir -p "$ARTIFACT_DIR/binaries"
+        mkdir -p "$ARTIFACT_DIR/configs"
+        mkdir -p "$ARTIFACT_DIR/scripts"
+        mkdir -p "$ARTIFACT_DIR/docs"
+
+        BINARY_DIR="$ARTIFACT_DIR/binaries"
+        ARTIFACT_COUNT=0
+
+        # Download OpenShift installer
+        echo "Downloading OpenShift installer..."
+        OCP_VERSION="$(params.ocp-version)"
+        INSTALLER_URL="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OCP_VERSION}/openshift-install-linux-${OCP_VERSION}.tar.gz"
+
+        if curl -f -L -o "$BINARY_DIR/openshift-install-linux-${OCP_VERSION}.tar.gz" "$INSTALLER_URL"; then
+          echo "✓ OpenShift installer downloaded"
+          ((ARTIFACT_COUNT++))
+        else
+          echo "⚠ Failed to download OpenShift installer"
+        fi
+
+        # Download OpenShift CLI
+        echo "Downloading OpenShift CLI..."
+        OC_URL="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OCP_VERSION}/openshift-client-linux-${OCP_VERSION}.tar.gz"
+
+        if curl -f -L -o "$BINARY_DIR/openshift-client-linux-${OCP_VERSION}.tar.gz" "$OC_URL"; then
+          echo "✓ OpenShift CLI downloaded"
+          ((ARTIFACT_COUNT++))
+        else
+          echo "⚠ Failed to download OpenShift CLI"
+        fi
+
+        # Download oc-mirror
+        echo "Downloading oc-mirror..."
+        OC_MIRROR_URL="https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OCP_VERSION}/oc-mirror.tar.gz"
+
+        if curl -f -L -o "$BINARY_DIR/oc-mirror.tar.gz" "$OC_MIRROR_URL"; then
+          echo "✓ oc-mirror downloaded"
+          ((ARTIFACT_COUNT++))
+        else
+          echo "⚠ Failed to download oc-mirror"
+        fi
+
+        # Download mirror-registry (for bootstrap)
+        if [ "$(params.include-bootstrap-tools)" == "true" ]; then
+          echo ""
+          echo "Downloading bootstrap tools..."
+
+          # mirror-registry
+          MIRROR_REGISTRY_URL="https://mirror.openshift.com/pub/openshift-v4/clients/mirror-registry/latest/mirror-registry.tar.gz"
+
+          if curl -f -L -o "$BINARY_DIR/mirror-registry.tar.gz" "$MIRROR_REGISTRY_URL"; then
+            echo "✓ mirror-registry downloaded"
+            ((ARTIFACT_COUNT++))
+          else
+            echo "⚠ Failed to download mirror-registry"
+          fi
+
+          # Helm CLI
+          HELM_VERSION="3.14.0"
+          HELM_URL="https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+
+          if curl -f -L -o "$BINARY_DIR/helm-v${HELM_VERSION}-linux-amd64.tar.gz" "$HELM_URL"; then
+            echo "✓ Helm CLI downloaded"
+            ((ARTIFACT_COUNT++))
+          else
+            echo "⚠ Failed to download Helm"
+          fi
+        fi
+
+        # Create README for binaries
+        cat > "$BINARY_DIR/README.txt" <<EOF
+        OpenShift Disconnected Binaries
+        ================================
+
+        This directory contains binaries required for disconnected OpenShift operations.
+
+        Files:
+        ------
+        - openshift-install-linux-${OCP_VERSION}.tar.gz
+          OpenShift installer for version ${OCP_VERSION}
+          Extract: tar -xzf openshift-install-linux-${OCP_VERSION}.tar.gz
+          Usage: ./openshift-install create cluster
+
+        - openshift-client-linux-${OCP_VERSION}.tar.gz
+          OpenShift CLI (oc, kubectl)
+          Extract: tar -xzf openshift-client-linux-${OCP_VERSION}.tar.gz
+          Usage: ./oc get nodes
+
+        - oc-mirror.tar.gz
+          Image mirroring tool
+          Extract: tar -xzf oc-mirror.tar.gz
+          Usage: ./oc-mirror --help
+
+        - mirror-registry.tar.gz
+          Tool to install Quay registry on bastion node
+          Extract: tar -xzf mirror-registry.tar.gz
+          Usage: ./mirror-registry install --help
+
+        - helm-v${HELM_VERSION}-linux-amd64.tar.gz
+          Helm CLI for Kubernetes
+          Extract: tar -xzf helm-v${HELM_VERSION}-linux-amd64.tar.gz
+          Usage: ./helm version
+
+        For bootstrap installation instructions, see:
+        docs/bootstrap-installation.md
+        EOF
+
+        # Create checksums for binaries
+        echo ""
+        echo "Generating checksums for artifacts..."
+        cd "$BINARY_DIR"
+        find . -type f -name "*.tar.gz" -exec sha256sum {} \; > CHECKSUMS.sha256
+        echo "✓ Checksums generated"
+
+        # Copy bootstrap installation guide
+        if [ -f "/templates/bootstrap-installation.md" ]; then
+          cp /templates/bootstrap-installation.md "$ARTIFACT_DIR/docs/"
+          echo "✓ Bootstrap guide included"
+        fi
+
+        echo ""
+        echo "========================================="
+        echo "Artifact Collection Summary"
+        echo "========================================="
+        echo "Artifacts collected: $ARTIFACT_COUNT"
+        echo "Location: $ARTIFACT_DIR"
+        echo ""
+
+        ls -lh "$BINARY_DIR"
+
+        echo ""
+        echo "Artifact collection complete"
+
+        # Write result
+        echo -n "$ARTIFACT_COUNT" > $(results.artifact-count.path)

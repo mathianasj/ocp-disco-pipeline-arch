@@ -1,0 +1,184 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: oc-mirror-collect
+  labels:
+    app: disconnected-mirror-pipeline
+    component: image-collection
+spec:
+  description: |
+    Collects OpenShift platform images, operator catalogs, and additional images
+    using oc-mirror tool with ImageSetConfiguration.
+
+  params:
+    - name: config-path
+      type: string
+      description: "Path to ImageSetConfiguration file"
+      default: "/config/imageset-config.yaml"
+
+    - name: registry-config
+      type: string
+      description: "Path to registry pull secret"
+      default: "/registry-config/.dockerconfigjson"
+
+    - name: incremental
+      type: string
+      description: "Whether this is an incremental mirror (true/false)"
+      default: "false"
+
+  workspaces:
+    - name: workspace
+      description: "Workspace for oc-mirror output"
+      mountPath: /workspace
+
+    - name: config
+      description: "Configuration files workspace"
+      mountPath: /config
+
+    - name: registry-creds
+      description: "Registry credentials secret"
+      mountPath: /registry-config
+
+  results:
+    - name: image-count
+      description: "Number of images mirrored"
+
+    - name: total-size
+      description: "Total size of mirrored content"
+
+  steps:
+    - name: mirror-images
+      image: registry.redhat.io/openshift4/ose-cli:latest
+      env:
+        - name: HOME
+          value: /workspace
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        echo "========================================="
+        echo "oc-mirror Collection Task"
+        echo "========================================="
+        echo "Configuration: $(params.config-path)"
+        echo "Incremental: $(params.incremental)"
+        echo "Workspace: /workspace"
+        echo ""
+
+        # Set up registry authentication
+        export DOCKER_CONFIG=/workspace/.docker
+        mkdir -p $DOCKER_CONFIG
+        cp $(params.registry-config) $DOCKER_CONFIG/config.json
+
+        # Create working directory
+        WORK_DIR="/workspace/oc-mirror-workspace"
+        mkdir -p "$WORK_DIR"
+        cd "$WORK_DIR"
+
+        # Check if oc-mirror is available
+        if ! command -v oc-mirror &> /dev/null; then
+          echo "ERROR: oc-mirror command not found"
+          echo "Please ensure oc-mirror is installed in the container image"
+          exit 1
+        fi
+
+        echo "oc-mirror version:"
+        oc-mirror version || echo "Version check failed, continuing..."
+        echo ""
+
+        # Validate ImageSetConfiguration exists
+        if [ ! -f "$(params.config-path)" ]; then
+          echo "ERROR: ImageSetConfiguration not found at $(params.config-path)"
+          exit 1
+        fi
+
+        echo "Using ImageSetConfiguration:"
+        cat "$(params.config-path)"
+        echo ""
+
+        # Run oc-mirror
+        echo "Starting oc-mirror collection..."
+        echo ""
+
+        if [ "$(params.incremental)" == "true" ]; then
+          echo "Running INCREMENTAL mirror..."
+          # Incremental mirror reuses previous workspace
+          oc-mirror \
+            --config "$(params.config-path)" \
+            --workspace "file://$WORK_DIR" \
+            --continue-on-error \
+            file://$WORK_DIR/mirror 2>&1 | tee /workspace/oc-mirror.log
+        else
+          echo "Running FULL mirror..."
+          # Full mirror starts fresh
+          oc-mirror \
+            --config "$(params.config-path)" \
+            --workspace "file://$WORK_DIR" \
+            --continue-on-error \
+            file://$WORK_DIR/mirror 2>&1 | tee /workspace/oc-mirror.log
+        fi
+
+        MIRROR_EXIT_CODE=$?
+
+        if [ $MIRROR_EXIT_CODE -ne 0 ]; then
+          echo ""
+          echo "WARNING: oc-mirror exited with code $MIRROR_EXIT_CODE"
+          echo "This may indicate partial failure. Check logs above."
+          echo "Continuing with available artifacts..."
+        else
+          echo ""
+          echo "oc-mirror completed successfully"
+        fi
+
+        # Count images and calculate size
+        echo ""
+        echo "Calculating mirror statistics..."
+
+        IMAGE_COUNT=0
+        TOTAL_SIZE="0"
+
+        if [ -d "$WORK_DIR/mirror" ]; then
+          # Count manifest files as a proxy for image count
+          IMAGE_COUNT=$(find "$WORK_DIR/mirror" -name "*.json" -o -name "manifest.json" 2>/dev/null | wc -l)
+
+          # Calculate total size
+          TOTAL_SIZE_BYTES=$(du -sb "$WORK_DIR/mirror" 2>/dev/null | cut -f1)
+          TOTAL_SIZE=$(numfmt --to=iec-i --suffix=B $TOTAL_SIZE_BYTES 2>/dev/null || echo "${TOTAL_SIZE_BYTES}B")
+        else
+          echo "WARNING: Mirror directory not found"
+        fi
+
+        echo "Images mirrored: $IMAGE_COUNT"
+        echo "Total size: $TOTAL_SIZE"
+
+        # Write results
+        echo -n "$IMAGE_COUNT" > $(results.image-count.path)
+        echo -n "$TOTAL_SIZE" > $(results.total-size.path)
+
+        # Create summary
+        cat > /workspace/mirror-summary.txt <<EOF
+        oc-mirror Collection Summary
+        =============================
+        Exit Code: $MIRROR_EXIT_CODE
+        Image Count: $IMAGE_COUNT
+        Total Size: $TOTAL_SIZE
+        Incremental: $(params.incremental)
+        Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        Working Directory: $WORK_DIR
+        Mirror Output: $WORK_DIR/mirror
+
+        See full logs in: /workspace/oc-mirror.log
+        EOF
+
+        cat /workspace/mirror-summary.txt
+
+        echo ""
+        echo "oc-mirror collection task complete"
+
+      volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+
+  volumes:
+    - name: workspace
+      emptyDir: {}

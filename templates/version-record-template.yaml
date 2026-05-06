@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mirror-version-record
+  namespace: mirror-pipeline
+  labels:
+    app: disconnected-mirror-pipeline
+    component: version-tracker
+data:
+  # Current active version on this cluster
+  current-version: ""
+
+  # Version history (last 10 versions)
+  version-history: |
+    []
+
+  # Last collection/import timestamp
+  last-sync-timestamp: ""
+
+  # Sync status
+  sync-status: ""  # success | failed | in-progress
+
+  # Last error message (if any)
+  last-error: ""

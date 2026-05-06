@@ -1,0 +1,218 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: package-archive
+  labels:
+    app: disconnected-mirror-pipeline
+    component: archive-packaging
+spec:
+  description: |
+    Packages all collected artifacts into a versioned tarball archive for physical media transport.
+    Creates a structured archive with manifest, checksums, and all artifacts.
+
+  params:
+    - name: version
+      type: string
+      description: "Version identifier for this collection"
+
+    - name: manifest-path
+      type: string
+      description: "Path to the manifest file"
+
+    - name: compression
+      type: string
+      description: "Compression algorithm: gzip, zstd, or none"
+      default: "gzip"
+
+  workspaces:
+    - name: source
+      description: "Source workspace with collected artifacts"
+      mountPath: /workspace/source
+
+    - name: destination
+      description: "Destination workspace for package archive"
+      mountPath: /workspace/packages
+
+  results:
+    - name: archive-path
+      description: "Path to created archive file"
+
+    - name: archive-size
+      description: "Size of created archive"
+
+    - name: archive-checksum
+      description: "SHA256 checksum of archive"
+
+  steps:
+    - name: package
+      image: registry.redhat.io/ubi9/ubi-minimal:latest
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        echo "========================================="
+        echo "Archive Packaging Task"
+        echo "========================================="
+        echo "Version: $(params.version)"
+        echo "Compression: $(params.compression)"
+        echo ""
+
+        # Install required tools
+        microdnf install -y tar gzip findutils coreutils
+
+        # Create package directory structure
+        PACKAGE_DIR="/workspace/packages/mirror-$(params.version)"
+        mkdir -p "$PACKAGE_DIR"
+
+        echo "Creating package directory: $PACKAGE_DIR"
+        echo ""
+
+        # Copy oc-mirror workspace
+        echo "Copying oc-mirror artifacts..."
+        if [ -d "/workspace/source/oc-mirror-workspace" ]; then
+          mkdir -p "$PACKAGE_DIR/images"
+          cp -r /workspace/source/oc-mirror-workspace "$PACKAGE_DIR/images/"
+          echo "✓ oc-mirror artifacts copied"
+        else
+          echo "⚠ No oc-mirror workspace found (this may be expected for some collection types)"
+        fi
+
+        # Copy manifest
+        echo "Copying manifest..."
+        if [ -f "$(params.manifest-path)" ]; then
+          cp "$(params.manifest-path)" "$PACKAGE_DIR/MANIFEST.yaml"
+          echo "✓ Manifest copied"
+        else
+          echo "⚠ Warning: Manifest not found at $(params.manifest-path)"
+        fi
+
+        # Create VERSION file
+        echo "Creating VERSION file..."
+        echo "$(params.version)" > "$PACKAGE_DIR/VERSION"
+        echo "✓ VERSION file created"
+
+        # Create README
+        echo "Creating README..."
+        cat > "$PACKAGE_DIR/README.txt" <<'EOF'
+        OpenShift Disconnected Mirror Package
+        =====================================
+
+        This package contains a versioned collection of OpenShift artifacts
+        for import into a disconnected (air-gapped) environment.
+
+        Contents:
+        ---------
+        - MANIFEST.yaml: Complete manifest of all artifacts
+        - VERSION: Version identifier for this package
+        - CHECKSUMS.sha256: SHA256 checksums for verification
+        - images/: Container images from oc-mirror
+        - helm-charts/: Helm chart packages (if included)
+        - operators/: Operator catalogs and bundles (if included)
+        - artifacts/: Additional artifacts (binaries, configs)
+        - import-scripts/: Helper scripts for import
+
+        Import Instructions:
+        -------------------
+        1. Verify checksums:
+           cd mirror-<version>
+           sha256sum -c CHECKSUMS.sha256
+
+        2. On disconnected OpenShift cluster:
+           - Deploy import pipeline
+           - Trigger import with this package path
+           - Monitor import pipeline execution
+
+        3. Validate import:
+           - Verify images pullable from mirror registry
+           - Check operator catalog availability
+           - Test Helm chart access
+
+        For detailed instructions, see the operations guide.
+
+        Version: VERSION_PLACEHOLDER
+        Generated: TIMESTAMP_PLACEHOLDER
+        EOF
+
+        sed -i "s/VERSION_PLACEHOLDER/$(params.version)/" "$PACKAGE_DIR/README.txt"
+        sed -i "s/TIMESTAMP_PLACEHOLDER/$(date -u +"%Y-%m-%d %H:%M:%S UTC")/" "$PACKAGE_DIR/README.txt"
+        echo "✓ README created"
+
+        # Create placeholder directories for future phases
+        mkdir -p "$PACKAGE_DIR/helm-charts"
+        mkdir -p "$PACKAGE_DIR/operators"
+        mkdir -p "$PACKAGE_DIR/artifacts/binaries"
+        mkdir -p "$PACKAGE_DIR/artifacts/configs"
+        mkdir -p "$PACKAGE_DIR/import-scripts"
+
+        # Generate checksums
+        echo ""
+        echo "Generating checksums..."
+        cd "$PACKAGE_DIR"
+        find . -type f ! -name "CHECKSUMS.sha256" -exec sha256sum {} \; > CHECKSUMS.sha256
+        CHECKSUM_COUNT=$(wc -l < CHECKSUMS.sha256)
+        echo "✓ Generated checksums for $CHECKSUM_COUNT files"
+
+        # Create archive
+        echo ""
+        echo "Creating archive..."
+        cd /workspace/packages
+
+        ARCHIVE_NAME="mirror-$(params.version)"
+
+        case "$(params.compression)" in
+          gzip)
+            ARCHIVE_FILE="$ARCHIVE_NAME.tar.gz"
+            echo "Using gzip compression..."
+            tar -czf "$ARCHIVE_FILE" "$ARCHIVE_NAME/"
+            ;;
+          zstd)
+            ARCHIVE_FILE="$ARCHIVE_NAME.tar.zst"
+            echo "Using zstd compression..."
+            # zstd not available in minimal image, fallback to gzip
+            echo "⚠ zstd not available, using gzip instead"
+            ARCHIVE_FILE="$ARCHIVE_NAME.tar.gz"
+            tar -czf "$ARCHIVE_FILE" "$ARCHIVE_NAME/"
+            ;;
+          none)
+            ARCHIVE_FILE="$ARCHIVE_NAME.tar"
+            echo "No compression..."
+            tar -cf "$ARCHIVE_FILE" "$ARCHIVE_NAME/"
+            ;;
+          *)
+            echo "ERROR: Unknown compression: $(params.compression)"
+            exit 1
+            ;;
+        esac
+
+        echo "✓ Archive created: $ARCHIVE_FILE"
+
+        # Calculate archive size and checksum
+        echo ""
+        echo "Calculating archive metadata..."
+        ARCHIVE_SIZE=$(du -h "$ARCHIVE_FILE" | cut -f1)
+        ARCHIVE_CHECKSUM=$(sha256sum "$ARCHIVE_FILE" | cut -d' ' -f1)
+
+        echo "Archive: $ARCHIVE_FILE"
+        echo "Size: $ARCHIVE_SIZE"
+        echo "SHA256: $ARCHIVE_CHECKSUM"
+
+        # Write results
+        echo -n "/workspace/packages/$ARCHIVE_FILE" > $(results.archive-path.path)
+        echo -n "$ARCHIVE_SIZE" > $(results.archive-size.path)
+        echo -n "$ARCHIVE_CHECKSUM" > $(results.archive-checksum.path)
+
+        # Create checksum file for the archive itself
+        echo "$ARCHIVE_CHECKSUM  $ARCHIVE_FILE" > "$ARCHIVE_FILE.sha256"
+
+        echo ""
+        echo "========================================="
+        echo "Package Summary"
+        echo "========================================="
+        echo "Version: $(params.version)"
+        echo "Archive: $ARCHIVE_FILE"
+        echo "Size: $ARCHIVE_SIZE"
+        echo "Checksum: $ARCHIVE_CHECKSUM"
+        echo "Location: /workspace/packages/"
+        echo ""
+        echo "Package ready for transfer to disconnected environment"
+        echo "========================================="

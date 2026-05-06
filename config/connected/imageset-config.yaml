@@ -1,0 +1,160 @@
+kind: ImageSetConfiguration
+apiVersion: mirror.openshift.io/v1alpha2
+metadata:
+  name: openshift-disconnected-mirror
+  labels:
+    environment: production
+    purpose: disconnected-mirroring
+archiveSize: 4
+
+storageConfig:
+  registry:
+    # REPLACE WITH YOUR MIRROR REGISTRY URL
+    imageURL: <REGISTRY_URL>/metadata:latest
+    skipTLS: false
+
+mirror:
+  platform:
+    # Specify OpenShift release channels and versions to mirror
+    channels:
+      - name: stable-4.15
+        type: ocp
+        minVersion: 4.15.0
+        maxVersion: 4.15.99
+        shortestPath: true
+      - name: stable-4.14
+        type: ocp
+        minVersion: 4.14.0
+        maxVersion: 4.14.99
+        shortestPath: true
+
+    # Include the upgrade graph for cluster updates
+    graph: true
+
+  # Operator catalogs to mirror
+  operators:
+    # Red Hat Operators catalog
+    - catalog: registry.redhat.io/redhat/redhat-operator-index:v4.15
+      full: true
+      packages:
+        # OpenShift Pipelines (Tekton)
+        - name: openshift-pipelines-operator-rh
+          channels:
+            - name: latest
+
+        # Red Hat Quay
+        - name: quay-operator
+          channels:
+            - name: stable-3.11
+
+        # OpenShift Container Storage / OpenShift Data Foundation
+        - name: odf-operator
+          channels:
+            - name: stable-4.15
+
+        # Elasticsearch for logging
+        - name: elasticsearch-operator
+          channels:
+            - name: stable
+
+        # OpenShift Logging
+        - name: cluster-logging
+          channels:
+            - name: stable
+
+        # OpenShift GitOps (ArgoCD)
+        - name: openshift-gitops-operator
+          channels:
+            - name: latest
+
+        # Advanced Cluster Management
+        - name: advanced-cluster-management
+          channels:
+            - name: release-2.10
+
+        # Service Mesh (Istio)
+        - name: servicemeshoperator
+          channels:
+            - name: stable
+
+        # Serverless (Knative)
+        - name: serverless-operator
+          channels:
+            - name: stable
+
+        # OpenShift Virtualization
+        - name: kubevirt-hyperconverged
+          channels:
+            - name: stable
+
+    # Certified Operators catalog (optional - add if needed)
+    - catalog: registry.redhat.io/redhat/certified-operator-index:v4.15
+      full: false
+      packages:
+        # Example: cert-manager
+        - name: cert-manager-operator
+          channels:
+            - name: stable
+
+    # Community Operators (optional - be selective for air-gap)
+    # - catalog: registry.redhat.io/redhat/community-operator-index:v4.15
+    #   full: false
+    #   packages:
+    #     - name: prometheus-operator
+
+  # Additional container images beyond platform/operators
+  additionalImages:
+    # Universal Base Images
+    - name: registry.redhat.io/ubi9/ubi:latest
+    - name: registry.redhat.io/ubi9/ubi-minimal:latest
+    - name: registry.redhat.io/ubi9/ubi-micro:latest
+    - name: registry.redhat.io/ubi8/ubi:latest
+    - name: registry.redhat.io/ubi8/ubi-minimal:latest
+
+    # Toolkit images
+    - name: registry.redhat.io/rhel8/support-tools:latest
+    - name: registry.redhat.io/ubi9/toolbox:latest
+
+    # Common application images (customize as needed)
+    - name: registry.redhat.io/rhscl/postgresql-13-rhel7:latest
+    - name: registry.redhat.io/rhscl/mysql-80-rhel7:latest
+    - name: registry.redhat.io/rhscl/redis-6-rhel7:latest
+    - name: registry.redhat.io/rhscl/nginx-120-rhel7:latest
+
+    # OpenShift CLI tools
+    - name: registry.redhat.io/openshift4/ose-cli:latest
+    - name: registry.redhat.io/openshift4/ose-cli-artifacts:latest
+
+    # Add your custom application images here
+    # - name: registry.example.com/myapp:v1.0.0
+
+  # Helm charts configuration (used by helm-collect task)
+  helm: {}
+
+---
+# Configuration notes:
+#
+# 1. Update <REGISTRY_URL> in storageConfig.registry.imageURL to your mirror registry
+#    Example: quay.example.com/mirror
+#
+# 2. Customize OpenShift versions in mirror.platform.channels
+#    - Use shortestPath: true to minimize image count
+#    - Add/remove channels based on your requirements
+#
+# 3. Customize operator packages in mirror.operators
+#    - Set full: true to mirror all operators in catalog (large)
+#    - Set full: false and specify individual packages (recommended)
+#    - Add channels to pin specific versions
+#
+# 4. Add custom images to mirror.additionalImages
+#    - Include any images your applications depend on
+#    - Use specific tags instead of :latest for reproducibility
+#
+# 5. Archive size (archiveSize: 4) creates 4GB chunks for multi-file archives
+#    - Adjust based on your media size constraints
+#    - Larger values = fewer files, smaller values = more portable
+#
+# 6. For incremental mirroring:
+#    - Reuse the same ImageSetConfiguration
+#    - oc-mirror automatically detects what's new
+#    - Manifests track incrementalFrom relationship

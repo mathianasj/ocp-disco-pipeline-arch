@@ -1,0 +1,184 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: generate-manifest
+  labels:
+    app: disconnected-mirror-pipeline
+    component: manifest-generator
+spec:
+  description: |
+    Generates an artifact manifest (MANIFEST.yaml) describing all collected artifacts.
+    This manifest provides version tracking and metadata for the mirror collection.
+
+  params:
+    - name: version
+      type: string
+      description: "Version identifier for this collection"
+
+    - name: timestamp
+      type: string
+      description: "ISO 8601 timestamp for this collection"
+
+    - name: trigger-type
+      type: string
+      description: "Trigger type: scheduled, manual, or event"
+      default: "manual"
+
+    - name: image-count
+      type: string
+      description: "Number of images collected"
+      default: "0"
+
+    - name: total-size
+      type: string
+      description: "Total size of collected artifacts"
+      default: "0"
+
+    - name: base-version
+      type: string
+      description: "Base version for incremental builds (optional)"
+      default: ""
+
+  workspaces:
+    - name: workspace
+      description: "Workspace containing collected artifacts"
+      mountPath: /workspace
+
+    - name: templates
+      description: "Template files workspace"
+      mountPath: /templates
+      optional: true
+
+  results:
+    - name: manifest-path
+      description: "Path to generated manifest file"
+
+  steps:
+    - name: generate
+      image: registry.redhat.io/ubi9/ubi-minimal:latest
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        echo "========================================="
+        echo "Manifest Generation Task"
+        echo "========================================="
+        echo "Version: $(params.version)"
+        echo "Timestamp: $(params.timestamp)"
+        echo "Trigger Type: $(params.trigger-type)"
+        echo ""
+
+        # Create manifest directory
+        MANIFEST_DIR="/workspace/manifests"
+        mkdir -p "$MANIFEST_DIR"
+
+        MANIFEST_FILE="$MANIFEST_DIR/MANIFEST-$(params.version).yaml"
+
+        echo "Generating manifest: $MANIFEST_FILE"
+
+        # Determine incremental type
+        if [ -n "$(params.base-version)" ]; then
+          INCREMENTAL_TYPE="incremental"
+          INCREMENTAL_FROM="$(params.base-version)"
+        else
+          INCREMENTAL_TYPE="full"
+          INCREMENTAL_FROM=""
+        fi
+
+        # Parse oc-mirror results if available
+        OC_MIRROR_WORKSPACE="/workspace/oc-mirror-workspace"
+        OPENSHIFT_VERSION="unknown"
+        OPENSHIFT_CHANNEL="unknown"
+
+        if [ -d "$OC_MIRROR_WORKSPACE" ]; then
+          # Try to extract OpenShift version from oc-mirror results
+          # This is a simplified extraction; in production, parse oc-mirror metadata
+          if [ -f "$OC_MIRROR_WORKSPACE/oc-mirror.log" ]; then
+            OPENSHIFT_VERSION=$(grep -oP "mirroring.*ocp.*\K\d+\.\d+\.\d+" "$OC_MIRROR_WORKSPACE/oc-mirror.log" | head -1 || echo "unknown")
+          fi
+        fi
+
+        # Generate manifest YAML
+        cat > "$MANIFEST_FILE" <<EOF
+        apiVersion: mirror.openshift.io/v1alpha1
+        kind: ArtifactManifest
+        metadata:
+          version: $(params.version)
+          timestamp: "$(params.timestamp)"
+          creator: "disconnected-mirror-pipeline"
+          description: "OpenShift disconnected mirror collection"
+
+        spec:
+          # OpenShift platform images
+          openshift:
+            version: "$OPENSHIFT_VERSION"
+            previousVersion: ""
+            channel: "$OPENSHIFT_CHANNEL"
+            architecture: "amd64"
+            images:
+              count: $(params.image-count)
+              totalSize: "$(params.total-size)"
+              digest: ""
+            mirrorSource: "registry.redhat.io"
+
+          # Operator catalogs and bundles
+          operators:
+            catalogs: []
+
+          # Helm charts
+          helm:
+            charts: []
+
+          # Generic artifacts
+          artifacts:
+            binaries: []
+            configs: []
+            documentation: []
+
+          # Checksums (to be filled by checksum task)
+          checksums:
+            manifestDigest: ""
+            archiveDigest: ""
+            algorithm: "sha256"
+
+          # Metadata
+          metadata:
+            triggerType: "$(params.trigger-type)"
+            source: "red-hat-cdn"
+            incrementalFrom: "$INCREMENTAL_FROM"
+            incrementalType: "$INCREMENTAL_TYPE"
+            collectionDuration: ""
+            archiveSize: ""
+            compressionRatio: ""
+
+          # Collection configuration snapshot
+          configuration:
+            imagesetConfig:
+              version: ""
+              digest: ""
+            helmRepos:
+              version: ""
+              digest: ""
+
+        status:
+          phase: "collecting"
+          conditions: []
+          collectionTimestamp: "$(params.timestamp)"
+          packageTimestamp: ""
+          importTimestamp: ""
+          errors: []
+          warnings: []
+        EOF
+
+        echo ""
+        echo "Manifest generated successfully:"
+        echo "----------------------------------------"
+        cat "$MANIFEST_FILE"
+        echo "----------------------------------------"
+        echo ""
+
+        # Write result
+        echo -n "$MANIFEST_FILE" > $(results.manifest-path.path)
+
+        echo "Manifest generation complete"
+        echo "Manifest path: $MANIFEST_FILE"

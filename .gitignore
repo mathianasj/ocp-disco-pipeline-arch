@@ -1,0 +1,42 @@
+# Workspace and build artifacts
+workspace/
+packages/
+*.tar.gz
+*.tar.zst
+*.tar
+mirror-v*/
+oc-mirror-workspace/
+
+# Checksums and logs
+*.sha256
+*.log
+checksum_verify.log
+oc-mirror.log
+
+# Secrets and credentials
+*.json
+*-secret.yaml
+pull-secret*
+registry-creds*
+
+# Kubernetes temporary files
+*.tmp
+*.swp
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+temp/
+tmp/
+*.bak
+
+# Environment files
+.env
+.env.local

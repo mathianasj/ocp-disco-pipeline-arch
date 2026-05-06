@@ -1,0 +1,67 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mirror-pipeline-role
+  namespace: mirror-pipeline
+  labels:
+    app: disconnected-mirror-pipeline
+    component: rbac
+rules:
+  # Access to ConfigMaps for configuration and version tracking
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+  # Access to Secrets for registry credentials
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+  # Access to PVCs for storage
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+
+  # Access to Pods for executing tasks
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+
+  # Access to Tekton resources
+  - apiGroups: ["tekton.dev"]
+    resources:
+      - "tasks"
+      - "taskruns"
+      - "pipelines"
+      - "pipelineruns"
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Access to events for logging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+# Cluster role for querying platform information (read-only)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mirror-pipeline-cluster-reader
+  labels:
+    app: disconnected-mirror-pipeline
+    component: rbac
+rules:
+  # Read cluster version information
+  - apiGroups: ["config.openshift.io"]
+    resources: ["clusterversions"]
+    verbs: ["get", "list"]
+
+  # Read operator information
+  - apiGroups: ["operators.coreos.com"]
+    resources: ["clusterserviceversions", "subscriptions", "catalogsources"]
+    verbs: ["get", "list"]
+
+  # Read namespace information
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]

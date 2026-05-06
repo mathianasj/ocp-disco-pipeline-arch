@@ -1,0 +1,75 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: mirror-collection-manual-
+  labels:
+    app: disconnected-mirror-pipeline
+    trigger-type: manual
+spec:
+  pipelineRef:
+    name: mirror-collection-pipeline
+
+  params:
+    - name: trigger-type
+      value: "manual"
+    - name: base-version
+      value: ""  # Empty for full mirror
+    - name: compression
+      value: "gzip"
+    - name: imageset-config-path
+      value: "/config/imageset-config.yaml"
+
+  workspaces:
+    # Mirror workspace - where oc-mirror works
+    - name: mirror-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 500Gi
+          # Adjust storageClassName for your environment
+          # storageClassName: gp3-csi
+
+    # Package workspace - where final archives are stored
+    - name: package-workspace
+      persistentVolumeClaim:
+        claimName: mirror-package-storage
+
+    # Configuration workspace
+    - name: config
+      configMap:
+        name: mirror-config
+        items:
+          - key: imageset-config.yaml
+            path: imageset-config.yaml
+
+    # Registry credentials
+    - name: registry-creds
+      secret:
+        secretName: redhat-pull-secret
+
+    # Templates (optional)
+    - name: templates
+      configMap:
+        name: mirror-templates
+        optional: true
+
+  # Resource limits
+  taskRunSpecs:
+    - pipelineTaskName: oc-mirror-collect
+      taskServiceAccountName: mirror-pipeline-sa
+      computeResources:
+        requests:
+          memory: "4Gi"
+          cpu: "2"
+        limits:
+          memory: "8Gi"
+          cpu: "4"
+
+  # Timeout
+  timeout: "4h0m0s"
+
+  # Service account
+  serviceAccountName: mirror-pipeline-sa
