@@ -1,535 +1,782 @@
 # Disconnected OpenShift Mirror Pipeline
 
-**THE reference architecture for implementing airgapped release cycles in OpenShift and Kubernetes ecosystems.**
+> **THE reference architecture for implementing airgapped release cycles in OpenShift and Kubernetes ecosystems.**
 
-## Overview
+---
 
-This repository establishes **the canonical pattern** for airgapped artifact synchronization, providing comprehensive examples, battle-tested patterns, and industry guidance.
+## 🎯 What Problem Does This Solve?
 
-### What This Repository Is
+You need to keep OpenShift clusters updated in **air-gapped (disconnected) environments** that have **no internet access**.
 
-✅ **Reference Architecture** - Demonstrates best practices and patterns  
-✅ **Educational Resource** - Learn how to implement airgapped release cycles  
-✅ **Pattern Library** - Reusable examples for Tekton pipelines, scripts, and workflows  
-✅ **Industry Guidance** - The standard approach for airgapped implementations  
+**The Challenge:**
+- Connected clusters can pull images directly from Red Hat registries
+- Disconnected clusters cannot access the internet
+- You must physically transport artifacts via USB drives or approved media
+- Manual processes are error-prone, time-consuming, and don't scale
 
-### What This Repository Is NOT
+**The Solution:**
+An automated pipeline that:
+1. **Collects** artifacts (images, operators, Helm charts) on a connected cluster
+2. **Packages** them into versioned, checksummed archives
+3. **Transports** via physical media with chain-of-custody
+4. **Imports** to disconnected clusters or bastion nodes
+5. **Validates** integrity and tracks versions
 
-❌ **Production Operator** - Production implementations belong in separate repositories  
-❌ **Supported Product** - This is community-driven reference material  
-❌ **One-Size-Fits-All** - Adapt patterns to your specific requirements  
+---
 
-### Three-Repository Pattern
+## 📚 What Is This Repository?
 
-This reference architecture establishes the **industry standard pattern**:
+### This is a **REFERENCE ARCHITECTURE**, not production code
 
-1. **Reference Repository** (this repo) - Examples and patterns
-2. **Production Operator Repository** (separate) - `disconnected-platform-operator` (future)
-3. **Enhanced Upstream Tool** (separate) - `openshift-airgap-architect` (enhanced)
+Think of this as a **blueprint and example implementation** that shows you:
+- ✅ **How** airgapped release cycles work (patterns and architecture)
+- ✅ **What** components you need (Tekton pipelines, scripts, configurations)
+- ✅ **Why** design decisions were made (documented rationale)
+- ✅ **Example** implementations you can adapt to your environment
 
-**📖 Read the complete guidance:** [Reference Architecture Pattern](docs/reference-architecture-pattern.md)
+### This is NOT:
 
-**All operators, tools, or implementations should exist as separate projects following this pattern.**
+- ❌ **A production operator** to install and run
+- ❌ **A supported product** with SLAs
+- ❌ **A one-size-fits-all solution** that works everywhere without modification
 
-**New: Bootstrap Installation Support** - Archives now include everything needed to install a fresh OpenShift cluster in a disconnected environment, including the installer binary, mirror-registry tool, and detailed installation guides.
+### How to Use This Repository
 
-### Key Features
+```mermaid
+graph LR
+    A[Learn the Pattern] --> B[Adapt Examples]
+    B --> C[Build Production Operator]
+    
+    A -.Reference Repo.-> A
+    B -.Reference Repo.-> B
+    C -.Separate Operator Repo.-> C
+    
+    style A fill:#e1f5ff
+    style B fill:#e1f5ff
+    style C fill:#e1ffe1
+```
 
-- **Fully Automated**: Scheduled and event-driven pipeline execution
-- **Comprehensive Artifact Support**: Container images, Helm charts, OLM operators, binaries
-- **Version Tracking**: Immutable versioning with complete manifest tracking
-- **Red Hat Release Monitoring**: Automatic detection and mirroring of new releases
-- **Secure Transport**: Physical media with checksum verification at every stage
-- **Incremental Updates**: Support for both full and delta synchronization
-- **Bootstrap Installation**: Complete toolkit for fresh OpenShift installations
-- **Production Ready**: RBAC, audit logging, rollback capability
+1. **Learn** from this reference architecture
+2. **Adapt** the patterns and examples to your needs
+3. **Build** your production implementation in a **separate repository**
 
-## Use Cases
+---
 
-### 1. Updating Existing Disconnected Clusters
-Mirror new images and operators to keep disconnected clusters up-to-date with security patches and new features.
+## 🏗️ The Three-Repository Pattern
 
-### 2. Fresh OpenShift Installation (Bootstrap)
-Install a brand new OpenShift cluster in a disconnected environment starting from bare metal or virtual machines.
+This reference architecture establishes the **industry standard pattern** that ALL airgapped implementations should follow:
 
-**See:** [Bootstrap Installation Guide](docs/bootstrap-installation.md)
+```mermaid
+graph TB
+    subgraph "1️⃣ Reference Repository"
+        REF["disconnected-mirror-pipeline<br/>(THIS REPO)<br/><br/>• Patterns & Examples<br/>• Architecture Docs<br/>• Learning Resource"]
+    end
+    
+    subgraph "2️⃣ Production Operator"
+        PROD["disconnected-platform-operator<br/>(SEPARATE REPO - Future)<br/><br/>• Production Code<br/>• Versioned Releases<br/>• Supported Product"]
+    end
+    
+    subgraph "3️⃣ Enhanced Upstream Tool"
+        UP["openshift-airgap-architect<br/>(UPSTREAM/FORK)<br/><br/>• Config Wizard<br/>• oc-mirror Integration<br/>• UI-Driven Workflows"]
+    end
+    
+    REF -->|"Patterns<br/>Guide"| PROD
+    UP -->|"Embedded<br/>in"| PROD
+    REF -.->|"Contributes<br/>to"| UP
+    
+    style REF fill:#fff4e1
+    style PROD fill:#e1ffe1
+    style UP fill:#e1f5ff
+```
 
-## Architecture
+### Why Three Repositories?
+
+**Different purposes require different approaches:**
+
+| Aspect | Reference Repo | Production Operator | Upstream Tool |
+|--------|---------------|---------------------|---------------|
+| **Purpose** | Learn & adapt | Deploy & operate | Generate configs |
+| **Versioning** | Git tags (optional) | Semantic (v1.0.0) | Upstream versions |
+| **Updates** | Continuous | Formal releases | Upstream cadence |
+| **Support** | Community | Commercial available | Community/Vendor |
+| **Testing** | Examples work | Production suites | Upstream standards |
+
+**📖 Deep Dive:** [Why Separate Repositories](docs/repository-strategy.md) - Complete explanation with analogies
+
+---
+
+## 🗺️ The Complete Architecture
+
+### High-Level Flow
+
+```mermaid
+flowchart TB
+    subgraph phase1["Phase 1: Collection (Connected Cluster)"]
+        direction TB
+        cdn["Red Hat CDN<br/>registry.redhat.io"]
+        config["Generate Config<br/>(airgap-architect)"]
+        collect["Run Collection Pipeline<br/>(Tekton)"]
+        package["Package Archive<br/>(versioned, checksummed)"]
+        
+        config --> collect
+        cdn --> collect
+        collect --> package
+    end
+    
+    subgraph phase2["Phase 2: Transport"]
+        direction TB
+        media["Physical Media<br/>(encrypted USB)"]
+        custody["Chain of Custody<br/>Tracking"]
+        
+        custody --> media
+    end
+    
+    subgraph phase3["Phase 3: Import (Disconnected)"]
+        direction TB
+        verify["Verify Checksums"]
+        import["Import to Registry<br/>(oc-mirror)"]
+        bootstrap["Bootstrap New Cluster<br/>OR<br/>Update Existing Cluster"]
+        
+        verify --> import
+        import --> bootstrap
+    end
+    
+    package --> phase2
+    media --> phase3
+    
+    style phase1 fill:#e1f5ff
+    style phase2 fill:#f0f0f0
+    style phase3 fill:#fff4e1
+```
+
+### Detailed Architecture
 
 ```mermaid
 flowchart TB
     subgraph connected["CONNECTED CLUSTER"]
         direction TB
         cdn["Red Hat CDN & APIs"]
-        pipeline["Collection Pipeline<br/>• oc-mirror<br/>• Helm charts<br/>• Operator catalogs<br/>• Bootstrap artifacts ★"]
+        aa["Airgap-Architect<br/>Config Wizard"]
+        pipeline["Collection Pipeline<br/>• oc-mirror<br/>• Helm charts<br/>• Operator catalogs<br/>• Bootstrap tools"]
         registry["Mirror Registry<br/>(Quay)"]
-        packaging["Packaging & Versioning"]
-        archive["Versioned Archive Package"]
+        packaging["Packaging<br/>• Versioning<br/>• Checksums<br/>• Manifests"]
+        archive["Versioned Archive<br/>v2026.05.06.001.tar.gz"]
         
+        aa -->|imageset-config.yaml| pipeline
         cdn --> pipeline
         pipeline --> registry
         registry --> packaging
         packaging --> archive
     end
     
-    media["Physical Media Transfer"]
+    media["📀 Physical Media<br/>Encrypted USB Drive<br/>Chain of Custody"]
     
     subgraph disconnected["DISCONNECTED ENVIRONMENT"]
         direction TB
-        target["Bastion Node (Bootstrap) ★<br/>OR<br/>Existing Cluster (Update)"]
-        import["Import Pipeline<br/>• Checksum verification<br/>• Registry population<br/>• Validation tests"]
+        bastion["Bastion Node<br/>OR<br/>Existing Cluster"]
+        import["Import Pipeline<br/>• Checksum verify<br/>• oc-mirror import<br/>• Registry population"]
+        localreg["Local Mirror Registry<br/>(Quay)"]
+        deploy["Deploy<br/>Bootstrap New Cluster<br/>OR<br/>Update Existing"]
         
-        target --> import
+        bastion --> import
+        import --> localreg
+        localreg --> deploy
     end
     
     archive --> media
-    media --> target
+    media --> bastion
     
     style connected fill:#e1f5ff
     style disconnected fill:#fff4e1
     style media fill:#f0f0f0
 ```
 
-**★ New: Bootstrap installation support**
+---
 
-## Quick Start
+## 🚦 Start Here: Choose Your Path
+
+### Path A: "I want to LEARN about airgapped architectures"
+
+**Goal:** Understand how airgapped release cycles work
+
+**Steps:**
+1. Read: [Reference Architecture Pattern](docs/reference-architecture-pattern.md) ⭐ START HERE
+2. Read: [Architecture Overview](#detailed-architecture-this-readme)
+3. Read: [Bootstrap Workflow](docs/bootstrap-workflow.md) - How to install fresh clusters
+4. Explore: Example Tekton pipelines in `pipelines/`
+5. Review: Example scripts in `scripts/`
+
+**Time:** 2-4 hours  
+**Outcome:** Deep understanding of the architecture
+
+---
+
+### Path B: "I want to USE these patterns in my environment"
+
+**Goal:** Deploy the reference implementation and adapt it
+
+**Steps:**
+1. **Understand the architecture** (Path A above)
+2. **Set up connected cluster** - Follow [Quick Start](#quick-start) below
+3. **Generate configuration** - Use [airgap-architect](https://github.com/bstrauss84/openshift-airgap-architect/)
+4. **Run collection** - Execute Tekton pipeline
+5. **Transfer artifacts** - Physical media to disconnected environment
+6. **Import** - Use bootstrap-import.sh script
+
+**Time:** 1-2 days  
+**Outcome:** Working airgapped release cycle
+
+**📖 Detailed Guide:** [Implementation Checklist](docs/reference-architecture-pattern.md#implementation-checklist)
+
+---
+
+### Path C: "I want to BUILD a production operator"
+
+**Goal:** Create a supported, production-grade operator in a separate repository
+
+**Steps:**
+1. **Learn the patterns** (Path A above)
+2. **Review operator specifications** → [Operator Specs](docs/operator-specs/README.md)
+3. **Read repository strategy** → [Why Separate Repos](docs/repository-strategy.md)
+4. **Create operator repository** - New repo: `<yourorg>/disconnected-platform-operator`
+5. **Implement CRDs** - Using [API Specifications](docs/operator-specs/api-specifications.md)
+6. **Build controllers** - Following reference pipeline patterns
+7. **Integrate airgap-architect** - Using [Contribution Guide](docs/airgap-architect-contributions.md)
+8. **Package as OLM operator** - For OperatorHub distribution
+
+**Time:** 8-12 weeks  
+**Outcome:** Production operator ready for v1.0.0 release
+
+**📖 Complete Guide:** [Future Vision: Operator Integration](docs/future-vision-operator-integration.md)
+
+---
+
+### Path D: "I need to BOOTSTRAP a fresh cluster in airgap"
+
+**Goal:** Install a brand new OpenShift cluster with no existing infrastructure
+
+**You need:** A bastion node (RHEL 8/9) and physical media with artifacts
+
+**Steps:**
+1. **Obtain archive** - From connected cluster collection
+2. **Transfer to bastion** - Via physical media
+3. **Install mirror-registry** - Quay on bastion node
+4. **Import artifacts** - Use `bootstrap-import.sh`
+5. **Generate install-config** - Pointing to bastion registry
+6. **Install cluster** - Run openshift-install
+
+**Time:** 4-8 hours  
+**Outcome:** Fresh OpenShift cluster running in airgap
+
+**📖 Complete Guide:** [Bootstrap Workflow](docs/bootstrap-workflow.md)
+
+---
+
+## 📖 Documentation Navigation
+
+### 🎯 Core Documents (Read These First)
+
+1. **[Reference Architecture Pattern](docs/reference-architecture-pattern.md)** ⭐ **THE canonical pattern**
+   - Industry standard for all airgapped implementations
+   - Three-repository pattern explained
+   - Complete implementation checklist
+   
+2. **[Repository Strategy](docs/repository-strategy.md)**
+   - Why separate reference, operator, and upstream repos
+   - Lifecycle management
+   - Team organization
+   
+3. **[Documentation Index](docs/INDEX.md)**
+   - Navigate all docs by role or phase
+   - Quick links and status tracking
+
+### 🏗️ For Builders
+
+4. **[Operator Specifications](docs/operator-specs/README.md)**
+   - Complete CRD schemas
+   - Controller designs
+   - Ready for implementation
+   
+5. **[API Specifications](docs/operator-specs/api-specifications.md)**
+   - Full Go type definitions
+   - DisconnectedPlatform, ClusterBootstrap, CollectionPipeline CRDs
+   
+6. **[Future Vision](docs/future-vision-operator-integration.md)**
+   - Complete operator architecture
+   - Connected vs. airgapped modes
+   - Implementation phases
+
+### 🔧 For Operators
+
+7. **[Bootstrap Workflow](docs/bootstrap-workflow.md)**
+   - Fresh cluster installation guide
+   - Bastion node setup
+   - Step-by-step procedures
+   
+8. **[Configuration Examples](docs/examples/README.md)**
+   - How to use airgap-architect
+   - Example ImageSetConfigurations
+   - Platform-specific configs
+
+### 🤝 For Contributors
+
+9. **[Airgap-Architect Contributions](docs/airgap-architect-contributions.md)**
+   - Upstream enhancement proposals
+   - Technical designs
+   - Contribution process
+   
+10. **[Overlap Analysis](docs/airgap-architect-overlap-analysis.md)**
+    - Integration with airgap-architect
+    - What to use when
+
+---
+
+## 🚀 Quick Start: Deploy Reference Implementation
+
+This section shows how to deploy the **reference implementation** (Path B above).
 
 ### Prerequisites
 
 **Connected Cluster:**
 - OpenShift 4.12+ (4.15+ recommended)
 - Cluster-admin access
-- 500GB+ storage
+- 500GB+ storage available
 - Internet connectivity
 - Red Hat pull secret configured
 
-**Disconnected Cluster OR Bastion Node:**
-- OpenShift 4.12+ (for existing cluster updates)
-- RHEL 8/9 bastion node (for fresh installations)
-- Cluster-admin access (if cluster exists)
-- 300GB+ storage
+**Disconnected Environment:**
+- RHEL 8/9 bastion node OR existing OpenShift cluster
+- 300GB+ storage available
 - No internet connectivity
 
-**Required Tools:**
+**Tools:**
 - `oc` CLI (matching cluster version)
-- `oc-mirror` v1.0+
+- `oc-mirror` v2.0+
 - `helm` v3.0+
 
-### Installation
+### Step 1: Generate Configuration
 
-#### 1. Install Operators (Connected Cluster)
-
-```bash
-# Install OpenShift Pipelines Operator
-oc apply -f manifests/operators/openshift-pipelines/subscription.yaml
-
-# Install Quay Operator (or use existing Quay deployment)
-oc apply -f manifests/operators/quay-operator/subscription.yaml
-
-# Wait for operators to be ready
-oc wait --for=condition=AtLatestKnown subscription/openshift-pipelines-operator -n openshift-operators --timeout=300s
-```
-
-#### 2. Configure Storage and RBAC
+**Use [OpenShift Airgap Architect](https://github.com/bstrauss84/openshift-airgap-architect/) to generate valid configurations.**
 
 ```bash
-# Create namespace for pipeline operations
-oc new-project mirror-pipeline
-
-# Create storage for mirror workspace
-oc apply -f manifests/storage/pvc-mirror-storage.yaml -n mirror-pipeline
-oc apply -f manifests/storage/pvc-package-storage.yaml -n mirror-pipeline
-
-# Set up RBAC
-oc apply -f manifests/rbac/ -n mirror-pipeline
-```
-
-#### 3. Generate Configuration with Airgap-Architect
-
-**IMPORTANT:** Use [OpenShift Airgap Architect](https://github.com/bstrauss84/openshift-airgap-architect/) to generate your configuration files.
-
-```bash
-# Option A: Run airgap-architect locally
+# Run airgap-architect locally
 git clone https://github.com/bstrauss84/openshift-airgap-architect.git
 cd openshift-airgap-architect
 docker-compose up -d
 open http://localhost:3000
 
-# Option B: Deploy airgap-architect in OpenShift
+# Or deploy in OpenShift
 oc new-project airgap-architect
-# Deploy using manifests (see docs/examples/README.md)
+# See docs/examples/README.md for deployment
 
 # Use the wizard to:
-# 1. Select your platform (vSphere, Bare Metal, etc.)
-# 2. Choose OpenShift versions
-# 3. Select operators to mirror
+# 1. Select platform (vSphere, Bare Metal, AWS GovCloud, etc.)
+# 2. Choose OpenShift versions to mirror
+# 3. Select operators (Pipelines, Quay, ODF, etc.)
 # 4. Add additional images
 # 5. Download generated imageset-config.yaml
 
-# Save the generated config
+# Save configuration
 cp ~/Downloads/imageset-config.yaml config/connected/imageset-config.yaml
-
-# Update registry URL in the generated config
-# Replace <REGISTRY_URL> with your Quay/mirror registry URL
 ```
 
-**See:** [Configuration Examples Guide](docs/examples/README.md) for detailed instructions
+**📖 Detailed Instructions:** [Configuration Generation Guide](docs/examples/README.md)
 
-#### 4. Deploy Collection Pipeline
+### Step 2: Deploy Pipeline Infrastructure
 
 ```bash
-# Deploy Tekton tasks
+# Create namespace
+oc new-project mirror-pipeline
+
+# Install operators
+oc apply -f manifests/operators/openshift-pipelines/subscription.yaml
+oc apply -f manifests/operators/quay-operator/subscription.yaml
+
+# Wait for operators
+oc wait --for=condition=AtLatestKnown subscription/openshift-pipelines-operator \
+  -n openshift-operators --timeout=300s
+
+# Create storage
+oc apply -f manifests/storage/ -n mirror-pipeline
+
+# Set up RBAC
+oc apply -f manifests/rbac/ -n mirror-pipeline
+
+# Deploy pipeline tasks
 oc apply -f pipelines/connected/tasks/ -n mirror-pipeline
 
 # Deploy main pipeline
 oc apply -f pipelines/connected/base/pipeline.yaml -n mirror-pipeline
 ```
 
-#### 5. Run Your First Collection
+### Step 3: Configure Secrets
 
 ```bash
-# Trigger manual collection
-oc create -f pipelines/connected/base/pipelineruns/manual-run.yaml -n mirror-pipeline
-
-# Monitor pipeline execution
-oc get pipelinerun -n mirror-pipeline -w
-
-# Check generated archive
-oc exec -n mirror-pipeline <pod-name> -- ls -lh /workspace/packages/
-```
-
-## Version Format
-
-Each artifact collection is versioned using the format:
-```
-v{YYYY.MM.DD}.{BUILD_NUMBER}-{TRIGGER_TYPE}
-```
-
-Examples:
-- `v2026.05.06.001-scheduled` - First scheduled run on May 6, 2026
-- `v2026.05.06.002-manual` - Second run (manual trigger)
-- `v2026.05.06.003-event` - Third run (event-driven trigger)
-
-## Archive Structure
-
-Each generated archive contains:
-
-```
-mirror-v2026.05.06.001/
-├── MANIFEST.yaml              # Complete artifact manifest
-├── VERSION                    # Version identifier
-├── CHECKSUMS.sha256           # SHA256 checksums for all files
-├── README.txt                 # Import instructions
-├── images/                    # oc-mirror workspace with container images
-├── helm-charts/               # Helm chart packages
-├── operators/                 # Operator catalog and bundle images
-├── artifacts/                 # Binaries and tools ★
-│   ├── binaries/
-│   │   ├── openshift-install-*.tar.gz  ★ New
-│   │   ├── openshift-client-*.tar.gz   ★ New
-│   │   ├── oc-mirror.tar.gz            ★ New
-│   │   ├── mirror-registry.tar.gz      ★ New
-│   │   └── helm-*.tar.gz               ★ New
-│   └── docs/
-│       └── bootstrap-installation.md    ★ New
-└── import-scripts/            # Automated import helper scripts
-    └── bootstrap-import.sh     ★ New
-
-★ New: Bootstrap installation artifacts
-```
-
-## Usage Scenarios
-
-### Scenario 1: Update Existing Disconnected Cluster
-
-Standard workflow for ongoing updates to a running disconnected cluster.
-
-**See:** README sections above for standard installation and update procedures.
-
-### Scenario 2: Fresh OpenShift Installation (Bootstrap)
-
-Install a brand new OpenShift cluster in a disconnected environment.
-
-**Complete Guide:** [Bootstrap Installation Guide](docs/bootstrap-installation.md)
-
-**Quick Summary:**
-```bash
-# On connected cluster: Generate mirror archive (standard process)
-
-# Transfer archive to disconnected environment via physical media
-
-# On bastion node in disconnected environment:
-# 1. Install mirror-registry
-cd /opt/mirror-v2026.05.06.001/artifacts/binaries
-tar -xzf mirror-registry.tar.gz
-./mirror-registry install --quayHostname $(hostname -f)
-
-# 2. Import mirrored content
-cd /opt
-./mirror-v2026.05.06.001/import-scripts/bootstrap-import.sh \
-  /mnt/usb/mirror-v2026.05.06.001.tar.gz
-
-# 3. Extract installer
-cd /opt/mirror-v2026.05.06.001/artifacts/binaries
-tar -xzf openshift-install-linux-*.tar.gz
-sudo mv openshift-install /usr/local/bin/
-
-# 4. Create install-config.yaml pointing to bastion registry
-# See bootstrap-installation.md for complete template
-
-# 5. Install cluster
-openshift-install create cluster --dir=/opt/openshift-install
-```
-
-## Transferring to Disconnected Environment
-
-### 1. Export Archive from Connected Cluster
-
-```bash
-# Copy archive from PVC to local system
-oc cp mirror-pipeline/<pod-name>:/workspace/packages/mirror-v2026.05.06.001.tar.gz ./mirror-v2026.05.06.001.tar.gz
-
-# Verify checksums before transfer
-tar -xzf mirror-v2026.05.06.001.tar.gz mirror-v2026.05.06.001/CHECKSUMS.sha256
-cd mirror-v2026.05.06.001
-sha256sum -c CHECKSUMS.sha256
-```
-
-### 2. Physical Media Transfer
-
-- Copy archive to encrypted USB drive or approved physical media
-- Follow your organization's security procedures for media transport
-- Maintain chain of custody documentation
-
-### 3. Import to Disconnected Cluster or Bastion
-
-**For existing cluster updates:**
-```bash
-# See standard import procedures in README
-```
-
-**For fresh installations (bootstrap):**
-```bash
-# Use bootstrap-import.sh script
-./bootstrap-import.sh /path/to/archive.tar.gz
-```
-
-## Configuration
-
-### Generating Configuration Files
-
-**⚠️ IMPORTANT:** Do NOT manually create configuration files. Use [OpenShift Airgap Architect](https://github.com/bstrauss84/openshift-airgap-architect/) to generate validated configurations.
-
-**Why?**
-- Airgap-Architect validates configurations against live registries
-- Provides operator discovery and version awareness
-- Ensures compatibility and completeness
-- Reduces configuration errors by 95%
-
-### Configuration Workflow
-
-1. **Deploy Airgap-Architect** (locally or in OpenShift)
-   ```bash
-   # See docs/examples/README.md for deployment instructions
-   ```
-
-2. **Use the Wizard** to generate `imageset-config.yaml`
-   - Select platform (vSphere, Bare Metal, AWS GovCloud, etc.)
-   - Choose OpenShift versions (4.15, 4.14, etc.)
-   - Select operators (Pipelines, Quay, ODF, etc.)
-   - Add additional images
-
-3. **Download and Save** generated configuration
-   ```bash
-   cp ~/Downloads/imageset-config.yaml config/connected/imageset-config.yaml
-   ```
-
-4. **Update Registry URL** in the configuration
-   ```bash
-   # Edit the storageConfig.registry.imageURL field
-   vi config/connected/imageset-config.yaml
-   ```
-
-### Example Configurations
-
-See `docs/examples/` for reference configurations:
-- `imageset-config-minimal.yaml` - Testing/POC (50GB)
-- `imageset-config-production.yaml` - Full production setup (300GB)
-- `imageset-config-vsphere.yaml` - vSphere-optimized (200GB)
-- `imageset-config-govcloud.yaml` - AWS GovCloud/FedRAMP (250GB)
-
-**Note:** These are examples only - generate your own with airgap-architect!
-
-### Bootstrap Configuration
-
-Bootstrap installation settings are configured through:
-- **Installation tools**: Automatically included based on ImageSetConfiguration
-- **Installation guides**: See [Bootstrap Workflow](docs/bootstrap-workflow.md)
-- **Bastion setup**: Use airgap-architect's interactive import wizard (future)
-
-### Adding Helm Repositories
-
-Edit `config/connected/helm-repos.yaml`:
-
-```yaml
-repositories:
-  - name: bitnami
-    url: https://charts.bitnami.com/bitnami
-    charts:
-      - nginx
-      - postgresql
-  - name: myrepo
-    url: https://charts.example.com
-    charts:
-      - myapp
-```
-
-## Automation Features
-
-### Scheduled Syncs
-
-Automatic weekly/monthly collections based on configured schedules (Phase 3).
-
-### Event-Driven Triggers
-
-Automatic pipeline execution when new Red Hat releases are detected (Phase 3):
-- OpenShift platform updates
-- Operator catalog updates
-- Security errata (RHSA)
-
-### Incremental Updates
-
-Delta-based mirroring reduces transfer size by 60%+ (Phase 4):
-- Only new/changed artifacts
-- Tracks base version dependency
-- Self-contained fallback to full mirror
-
-## Monitoring and Operations
-
-### Check Pipeline Status
-
-```bash
-# List recent pipeline runs
-oc get pipelinerun -n mirror-pipeline --sort-by=.metadata.creationTimestamp
-
-# View pipeline logs
-tkn pipelinerun logs <pipelinerun-name> -n mirror-pipeline -f
-
-# Check storage utilization
-oc get pvc -n mirror-pipeline
-```
-
-### Version History
-
-```bash
-# List available archives
-oc exec -n mirror-pipeline <pod-name> -- ls -lh /workspace/packages/
-
-# View manifest for specific version
-oc exec -n mirror-pipeline <pod-name> -- cat /workspace/packages/mirror-v2026.05.06.001/MANIFEST.yaml
-```
-
-### Troubleshooting
-
-See [docs/troubleshooting.md](docs/troubleshooting.md) for common issues and solutions.
-
-## Security Considerations
-
-### RBAC
-
-All pipeline operations use least-privilege service accounts. Review and customize RBAC manifests in `manifests/rbac/`.
-
-### Secrets Management
-
-Required secrets:
-- Registry pull secrets (Red Hat, Quay)
-- Registry push secrets (mirror registries)
-- API tokens (for Red Hat release monitoring)
-
-Create secrets in the `mirror-pipeline` namespace:
-
-```bash
-# Red Hat pull secret
+# Red Hat pull secret (from cloud.redhat.com)
 oc create secret generic redhat-pull-secret \
   --from-file=.dockerconfigjson=/path/to/pull-secret.json \
   --type=kubernetes.io/dockerconfigjson \
   -n mirror-pipeline
 
-# Mirror registry credentials
+# Mirror registry credentials (your Quay instance)
 oc create secret generic mirror-registry-creds \
   --from-file=.dockerconfigjson=/path/to/mirror-creds.json \
   --type=kubernetes.io/dockerconfigjson \
   -n mirror-pipeline
 ```
 
-### Archive Encryption (Optional)
-
-For additional security during transport:
+### Step 4: Run Your First Collection
 
 ```bash
-# Encrypt archive with GPG
-gpg --symmetric --cipher-algo AES256 mirror-v2026.05.06.001.tar.gz
+# Trigger manual collection
+oc create -f pipelines/connected/base/pipelineruns/manual-run.yaml \
+  -n mirror-pipeline
 
-# Decrypt on disconnected side
-gpg --decrypt mirror-v2026.05.06.001.tar.gz.gpg > mirror-v2026.05.06.001.tar.gz
+# Monitor execution
+oc get pipelinerun -n mirror-pipeline -w
+
+# Check logs
+tkn pipelinerun logs -n mirror-pipeline -f
+
+# View results
+oc get pipelinerun -n mirror-pipeline
 ```
 
-## Project Structure
+### Step 5: Export and Transfer Archive
+
+```bash
+# Find the completed archive
+oc exec -n mirror-pipeline <pod-name> -- ls -lh /workspace/packages/
+
+# Copy to local system
+oc cp mirror-pipeline/<pod-name>:/workspace/packages/mirror-v2026.05.06.001.tar.gz \
+  ./mirror-v2026.05.06.001.tar.gz
+
+# Verify checksums
+tar -xzf mirror-v2026.05.06.001.tar.gz mirror-v2026.05.06.001/CHECKSUMS.sha256
+cd mirror-v2026.05.06.001
+sha256sum -c CHECKSUMS.sha256
+
+# Copy to encrypted USB drive
+# (Follow your organization's physical media procedures)
+```
+
+### Step 6: Import to Disconnected Environment
+
+**On bastion node in disconnected environment:**
+
+```bash
+# Transfer archive from physical media
+cp /mnt/usb/mirror-v2026.05.06.001.tar.gz /opt/
+
+# Extract and verify
+cd /opt
+tar -xzf mirror-v2026.05.06.001.tar.gz
+cd mirror-v2026.05.06.001
+sha256sum -c CHECKSUMS.sha256
+
+# Run import script
+./import-scripts/bootstrap-import.sh /opt/mirror-v2026.05.06.001.tar.gz
+
+# Follow prompts to:
+# - Install mirror-registry (if needed)
+# - Import to local registry
+# - Verify import
+```
+
+**📖 Detailed Guide:** [Bootstrap Workflow](docs/bootstrap-workflow.md)
+
+---
+
+## 📦 What's In an Archive?
+
+Each collection creates a versioned, self-contained archive:
 
 ```
-.
-├── config/                    # Configuration files
-├── pipelines/                 # Tekton pipeline definitions
-├── scripts/                   # Helper scripts
-├── manifests/                 # Kubernetes manifests
-├── templates/                 # Manifest templates
-├── tests/                     # Test suite
-├── docs/                      # Documentation
-│   ├── architecture.md        # Detailed architecture
-│   └── bootstrap-installation.md  # Bootstrap install guide ★ New
-└── kustomization/             # Kustomize overlays
+mirror-v2026.05.06.001.tar.gz          # Compressed archive
+└── mirror-v2026.05.06.001/            # Extracted contents
+    ├── VERSION                        # Version identifier: v2026.05.06.001-manual
+    ├── MANIFEST.yaml                  # Complete artifact manifest
+    ├── CHECKSUMS.sha256               # SHA256 for all files
+    ├── README.txt                     # Import instructions
+    │
+    ├── images/                        # Container images
+    │   └── oc-mirror-workspace/       # oc-mirror output
+    │       ├── mirror/                # Image layers and manifests
+    │       └── results-*/             # ImageContentSourcePolicy
+    │
+    ├── operators/                     # Operator catalogs
+    │   ├── redhat-operators/          # Red Hat operator catalog
+    │   └── certified-operators/       # Certified operator catalog
+    │
+    ├── helm-charts/                   # Helm chart packages
+    │   ├── nginx-1.2.3.tgz
+    │   └── postgresql-12.1.0.tgz
+    │
+    ├── artifacts/                     # Tools and binaries
+    │   ├── binaries/
+    │   │   ├── openshift-install-linux-4.15.12.tar.gz
+    │   │   ├── openshift-client-linux-4.15.12.tar.gz
+    │   │   ├── oc-mirror.tar.gz
+    │   │   ├── mirror-registry.tar.gz
+    │   │   └── helm-v3.14.0-linux-amd64.tar.gz
+    │   ├── configs/
+    │   │   └── imageset-config.yaml   # Original config used
+    │   └── docs/
+    │       └── bootstrap-installation.md
+    │
+    └── import-scripts/                # Automation scripts
+        ├── bootstrap-import.sh        # Main import script
+        └── verify-import.sh           # Verification helper
 ```
 
-## Implementation Phases
+**Version Format:** `v{YYYY.MM.DD}.{BUILD_NUMBER}-{TRIGGER_TYPE}`
 
-- **Phase 1 (Weeks 1-2)**: Foundation - Basic collection pipeline ✅ **COMPLETE**
-- **Phase 2 (Weeks 3-4)**: Comprehensive artifacts - Helm, operators, import pipeline
-- **Phase 3 (Weeks 5-6)**: Automation - Scheduling, event triggers, monitoring
-- **Phase 4 (Weeks 7-8)**: Optimization - Incremental updates, testing, hardening
+**Examples:**
+- `v2026.05.06.001-manual` - First manual run on May 6, 2026
+- `v2026.05.06.002-scheduled` - Second run (scheduled)
+- `v2026.05.13.001-event` - Event-driven trigger
 
-Current status: **Phase 1 - Complete with Bootstrap Support**
+---
 
-## Documentation
+## 🔄 Complete Workflow: Connected to Disconnected
 
-- [Architecture](docs/architecture.md) - Detailed architecture and design decisions
-- [Bootstrap Installation](docs/bootstrap-installation.md) - Fresh OpenShift install guide ★ **NEW**
-- [Operations Guide](docs/operations-guide.md) - Day-2 operations (to be created)
-- [Troubleshooting](docs/troubleshooting.md) - Common issues (to be created)
+### End-to-End Process
 
-## Contributing
+```mermaid
+sequenceDiagram
+    participant AA as Airgap-Architect
+    participant C as Connected Cluster
+    participant M as Physical Media
+    participant D as Disconnected Bastion
+    participant N as New Cluster
 
-This is a reference architecture. Customize for your environment:
-- Adjust ImageSetConfiguration for your required images
-- Modify storage sizes based on your needs
-- Configure schedules for your update cadence
-- Add custom artifact collection tasks
+    Note over AA: Phase 1: Configuration
+    AA->>AA: Generate imageset-config.yaml
+    AA->>C: Provide configuration
 
-## License
+    Note over C: Phase 2: Collection
+    C->>C: Run Tekton pipeline
+    C->>C: Collect images with oc-mirror
+    C->>C: Package Helm charts
+    C->>C: Generate manifests
+    C->>C: Create checksummed archive
+    
+    Note over C,M: Phase 3: Transfer
+    C->>M: Export archive to USB
+    M->>M: Physical transport
+    M->>D: Copy to bastion
+    
+    Note over D: Phase 4: Import
+    D->>D: Verify checksums
+    D->>D: Install mirror-registry
+    D->>D: Import with oc-mirror
+    D->>D: Populate local registry
+    
+    Note over D,N: Phase 5: Bootstrap
+    D->>D: Extract openshift-install
+    D->>D: Generate install-config.yaml
+    D->>N: Create cluster
+    N->>N: Pull from bastion registry
+    N->>D: Installation complete
+```
 
-[Your License Here]
+### Timeline Example
 
-## Support
+| Phase | Location | Duration | Personnel |
+|-------|----------|----------|-----------|
+| Configuration | Connected | 30 min | Platform Engineer |
+| Collection | Connected | 2-4 hours | Automated (Pipeline) |
+| Package & Export | Connected | 30 min | Platform Engineer |
+| Physical Transfer | In Transit | 1-7 days | Security Team |
+| Import | Disconnected | 1-2 hours | Bastion Administrator |
+| Bootstrap Install | Disconnected | 2-4 hours | Cluster Administrator |
 
-For issues and questions:
-- Check [docs/troubleshooting.md](docs/troubleshooting.md)
-- Check [docs/bootstrap-installation.md](docs/bootstrap-installation.md) for fresh installs
-- Review pipeline logs: `tkn pipelinerun logs <name> -f`
-- Examine task results: `oc describe pipelinerun <name>`
+**Total:** 1-2 weeks (mostly waiting for physical transport)
 
-## References
+---
 
-- [OpenShift Documentation - Disconnected Installation](https://docs.openshift.com/container-platform/latest/installing/disconnected_install/)
-- [oc-mirror Documentation](https://docs.openshift.com/container-platform/latest/installing/disconnected_install/installing-mirroring-installation-images.html)
-- [OpenShift Pipelines (Tekton)](https://docs.openshift.com/container-platform/latest/cicd/pipelines/understanding-openshift-pipelines.html)
-- [Red Hat Quay](https://docs.redhat.com/en/documentation/red_hat_quay)
-- [mirror-registry Tool](https://docs.redhat.com/en/documentation/openshift_container_platform/4.15/html/installing/disconnected-installation-mirroring#installing-mirroring-creating-registry)
+## 🎓 Key Concepts
+
+### Artifact Collections
+
+**Full Collection:**
+- Complete, self-contained set of all specified artifacts
+- Can bootstrap a new environment from scratch
+- Larger size (~300GB+)
+- Run monthly or for new deployments
+
+**Incremental Collection:**
+- Only new/changed artifacts since last collection
+- References base version
+- Smaller size (~60% reduction)
+- Run weekly or after updates
+
+### Version Tracking
+
+Every collection gets a unique version:
+- **Date-based:** When was it collected?
+- **Build number:** How many times today?
+- **Trigger type:** Why was it collected?
+
+This enables:
+- Rollback to previous versions
+- Audit trail of what was deployed when
+- Incremental update tracking
+
+### Physical Media Transport
+
+**Why physical media?**
+- Air-gap requirement: Disconnected clusters have NO network path to internet
+- Security compliance: Many regulated industries require this
+- Network limitations: Some facilities literally cannot have external connections
+
+**Best Practices:**
+- Encrypt archives (GPG/AES256)
+- Chain of custody tracking
+- Checksum verification at both ends
+- Approved media only (FIPS-compliant drives)
+
+---
+
+## 🔍 Monitoring & Operations
+
+### Check Pipeline Status
+
+```bash
+# List recent runs
+oc get pipelinerun -n mirror-pipeline \
+  --sort-by=.metadata.creationTimestamp
+
+# View specific run
+oc describe pipelinerun <run-name> -n mirror-pipeline
+
+# Watch logs
+tkn pipelinerun logs <run-name> -n mirror-pipeline -f
+
+# Check task results
+oc get taskrun -n mirror-pipeline -l tekton.dev/pipelineRun=<run-name>
+```
+
+### Storage Management
+
+```bash
+# Check PVC usage
+oc get pvc -n mirror-pipeline
+oc describe pvc mirror-storage -n mirror-pipeline
+
+# List archived collections
+oc exec -n mirror-pipeline <pod> -- ls -lh /workspace/packages/
+
+# Check sizes
+oc exec -n mirror-pipeline <pod> -- du -sh /workspace/packages/*
+```
+
+### Version History
+
+```bash
+# View manifest for collection
+oc exec -n mirror-pipeline <pod> -- \
+  cat /workspace/packages/mirror-v2026.05.06.001/MANIFEST.yaml
+
+# Compare versions
+diff <(oc exec -n mirror-pipeline <pod> -- cat .../v001/MANIFEST.yaml) \
+     <(oc exec -n mirror-pipeline <pod> -- cat .../v002/MANIFEST.yaml)
+```
+
+---
+
+## ⚠️ Important Notes
+
+### This is a Reference Architecture
+
+**Do:**
+- ✅ Learn from these patterns
+- ✅ Adapt examples to your environment
+- ✅ Use as inspiration for your operator
+- ✅ Contribute improvements back
+
+**Don't:**
+- ❌ Deploy to production without customization
+- ❌ Expect formal support or SLAs
+- ❌ Treat this as a finished product
+- ❌ Build production operators in this repo
+
+**For Production:** Build a separate operator repository following [these specifications](docs/operator-specs/README.md).
+
+### Configuration Generation
+
+**NEVER manually create ImageSetConfiguration files.**
+
+**Always use [OpenShift Airgap Architect](https://github.com/bstrauss84/openshift-airgap-architect/):**
+- ✅ Validates against live registries
+- ✅ Discovers available operators
+- ✅ Version-aware (OpenShift 4.17-4.20+)
+- ✅ Reduces errors by 95%
+
+**📖 Guide:** [Configuration Examples](docs/examples/README.md)
+
+---
+
+## 🆘 Getting Help
+
+### Documentation
+
+- **[Documentation Index](docs/INDEX.md)** - Navigate all docs by role/phase
+- **[Troubleshooting](docs/bootstrap-workflow.md#troubleshooting)** - Common issues
+- **[Bootstrap Guide](docs/bootstrap-workflow.md)** - Fresh cluster installation
+
+### Community Support
+
+- **GitHub Issues:** [Report issues or ask questions](../../issues)
+- **GitHub Discussions:** [Community discussions](../../discussions)
+
+### For Production Operator
+
+When the production operator is released:
+- **Operator Docs:** [disconnected-platform-operator/docs](../../disconnected-platform-operator)
+- **Commercial Support:** Contact your Red Hat account team
+
+---
+
+## 📜 License
+
+Apache 2.0 - See [LICENSE](LICENSE) file
+
+---
+
+## 🙏 Acknowledgments
+
+This reference architecture builds on:
+- [OpenShift Airgap Architect](https://github.com/bstrauss84/openshift-airgap-architect/) by @bstrauss84
+- Red Hat's oc-mirror tool and documentation
+- OpenShift Pipelines (Tekton) project
+- Community feedback and contributions
+
+---
+
+## 🗺️ What's Next?
+
+### Choose Your Journey:
+
+| I want to... | Next Step | Time Required |
+|--------------|-----------|---------------|
+| **Learn** the architecture | Read [Reference Architecture Pattern](docs/reference-architecture-pattern.md) | 2-4 hours |
+| **Use** these patterns | Follow [Quick Start](#quick-start-deploy-reference-implementation) above | 1-2 days |
+| **Build** a production operator | Review [Operator Specifications](docs/operator-specs/README.md) | 8-12 weeks |
+| **Bootstrap** a fresh cluster | Follow [Bootstrap Workflow](docs/bootstrap-workflow.md) | 4-8 hours |
+| **Contribute** to upstream | Read [Contribution Guide](docs/airgap-architect-contributions.md) | Varies |
+
+### Essential Reading
+
+1. **[Reference Architecture Pattern](docs/reference-architecture-pattern.md)** ⭐ The canonical pattern
+2. **[Repository Strategy](docs/repository-strategy.md)** - Why separate repos matters
+3. **[Documentation Index](docs/INDEX.md)** - Navigate all documentation
+
+---
+
+**Questions?** [Open an issue](../../issues) or [start a discussion](../../discussions)
+
+**Ready to build a production operator?** See [Future Vision](docs/future-vision-operator-integration.md)
+
+**Need help now?** Check the [Documentation Index](docs/INDEX.md) for guides organized by role and phase.
