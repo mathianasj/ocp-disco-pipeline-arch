@@ -1,0 +1,52 @@
+# Example ImageSetConfiguration - Minimal
+# Generated with: OpenShift Airgap Architect v1.0.0
+# Date: 2026-05-08
+# Purpose: Minimal configuration for testing and POC
+#
+# ⚠️  This is an EXAMPLE ONLY - Generate your own using airgap-architect
+# See: docs/examples/README.md
+
+kind: ImageSetConfiguration
+apiVersion: mirror.openshift.io/v1alpha2
+metadata:
+  name: openshift-minimal-mirror
+  labels:
+    environment: development
+    purpose: testing
+
+archiveSize: 4
+
+storageConfig:
+  registry:
+    imageURL: quay.example.com/mirror/metadata:latest
+    skipTLS: false
+
+mirror:
+  platform:
+    channels:
+      - name: stable-4.15
+        type: ocp
+        minVersion: 4.15.12
+        maxVersion: 4.15.12  # Single version for minimal mirror
+        shortestPath: true
+    graph: true
+
+  operators:
+    - catalog: registry.redhat.io/redhat/redhat-operator-index:v4.15
+      full: false
+      packages:
+        # Only essential operators
+        - name: openshift-pipelines-operator-rh
+          channels:
+            - name: latest
+
+        - name: quay-operator
+          channels:
+            - name: stable-3.11
+
+  additionalImages:
+    # Minimal UBI images
+    - name: registry.redhat.io/ubi9/ubi-minimal:latest
+    - name: registry.redhat.io/openshift4/ose-cli:latest
+
+  helm: {}

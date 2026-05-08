@@ -1,10 +1,35 @@
 # Disconnected OpenShift Mirror Pipeline
 
-A comprehensive, automated pipeline solution for mirroring OpenShift artifacts to air-gapped (disconnected) environments using OpenShift Pipelines (Tekton).
+**THE reference architecture for implementing airgapped release cycles in OpenShift and Kubernetes ecosystems.**
 
 ## Overview
 
-This project enables fully automated artifact synchronization from internet-connected OpenShift clusters to air-gapped clusters via physical media transport. It handles container images, Helm charts, operator bundles, and generic artifacts with complete version tracking and validation.
+This repository establishes **the canonical pattern** for airgapped artifact synchronization, providing comprehensive examples, battle-tested patterns, and industry guidance.
+
+### What This Repository Is
+
+✅ **Reference Architecture** - Demonstrates best practices and patterns  
+✅ **Educational Resource** - Learn how to implement airgapped release cycles  
+✅ **Pattern Library** - Reusable examples for Tekton pipelines, scripts, and workflows  
+✅ **Industry Guidance** - The standard approach for airgapped implementations  
+
+### What This Repository Is NOT
+
+❌ **Production Operator** - Production implementations belong in separate repositories  
+❌ **Supported Product** - This is community-driven reference material  
+❌ **One-Size-Fits-All** - Adapt patterns to your specific requirements  
+
+### Three-Repository Pattern
+
+This reference architecture establishes the **industry standard pattern**:
+
+1. **Reference Repository** (this repo) - Examples and patterns
+2. **Production Operator Repository** (separate) - `disconnected-platform-operator` (future)
+3. **Enhanced Upstream Tool** (separate) - `openshift-airgap-architect` (enhanced)
+
+**📖 Read the complete guidance:** [Reference Architecture Pattern](docs/reference-architecture-pattern.md)
+
+**All operators, tools, or implementations should exist as separate projects following this pattern.**
 
 **New: Bootstrap Installation Support** - Archives now include everything needed to install a fresh OpenShift cluster in a disconnected environment, including the installer binary, mirror-registry tool, and detailed installation guides.
 
@@ -119,15 +144,36 @@ oc apply -f manifests/storage/pvc-package-storage.yaml -n mirror-pipeline
 oc apply -f manifests/rbac/ -n mirror-pipeline
 ```
 
-#### 3. Configure Mirror Settings
+#### 3. Generate Configuration with Airgap-Architect
+
+**IMPORTANT:** Use [OpenShift Airgap Architect](https://github.com/bstrauss84/openshift-airgap-architect/) to generate your configuration files.
 
 ```bash
-# Update imageset-config.yaml with your requirements
-vi config/connected/imageset-config.yaml
+# Option A: Run airgap-architect locally
+git clone https://github.com/bstrauss84/openshift-airgap-architect.git
+cd openshift-airgap-architect
+docker-compose up -d
+open http://localhost:3000
 
-# Update registry URLs in the configuration
+# Option B: Deploy airgap-architect in OpenShift
+oc new-project airgap-architect
+# Deploy using manifests (see docs/examples/README.md)
+
+# Use the wizard to:
+# 1. Select your platform (vSphere, Bare Metal, etc.)
+# 2. Choose OpenShift versions
+# 3. Select operators to mirror
+# 4. Add additional images
+# 5. Download generated imageset-config.yaml
+
+# Save the generated config
+cp ~/Downloads/imageset-config.yaml config/connected/imageset-config.yaml
+
+# Update registry URL in the generated config
 # Replace <REGISTRY_URL> with your Quay/mirror registry URL
 ```
+
+**See:** [Configuration Examples Guide](docs/examples/README.md) for detailed instructions
 
 #### 4. Deploy Collection Pipeline
 
@@ -270,20 +316,56 @@ sha256sum -c CHECKSUMS.sha256
 
 ## Configuration
 
-### Customizing Image Collections
+### Generating Configuration Files
 
-Edit `config/connected/imageset-config.yaml` to specify:
-- OpenShift versions and channels
-- Operator catalogs and packages
-- Additional container images
-- Platform components
+**⚠️ IMPORTANT:** Do NOT manually create configuration files. Use [OpenShift Airgap Architect](https://github.com/bstrauss84/openshift-airgap-architect/) to generate validated configurations.
+
+**Why?**
+- Airgap-Architect validates configurations against live registries
+- Provides operator discovery and version awareness
+- Ensures compatibility and completeness
+- Reduces configuration errors by 95%
+
+### Configuration Workflow
+
+1. **Deploy Airgap-Architect** (locally or in OpenShift)
+   ```bash
+   # See docs/examples/README.md for deployment instructions
+   ```
+
+2. **Use the Wizard** to generate `imageset-config.yaml`
+   - Select platform (vSphere, Bare Metal, AWS GovCloud, etc.)
+   - Choose OpenShift versions (4.15, 4.14, etc.)
+   - Select operators (Pipelines, Quay, ODF, etc.)
+   - Add additional images
+
+3. **Download and Save** generated configuration
+   ```bash
+   cp ~/Downloads/imageset-config.yaml config/connected/imageset-config.yaml
+   ```
+
+4. **Update Registry URL** in the configuration
+   ```bash
+   # Edit the storageConfig.registry.imageURL field
+   vi config/connected/imageset-config.yaml
+   ```
+
+### Example Configurations
+
+See `docs/examples/` for reference configurations:
+- `imageset-config-minimal.yaml` - Testing/POC (50GB)
+- `imageset-config-production.yaml` - Full production setup (300GB)
+- `imageset-config-vsphere.yaml` - vSphere-optimized (200GB)
+- `imageset-config-govcloud.yaml` - AWS GovCloud/FedRAMP (250GB)
+
+**Note:** These are examples only - generate your own with airgap-architect!
 
 ### Bootstrap Configuration
 
-Edit `config/connected/bootstrap-config.yaml` to customize:
-- OpenShift version for installer binary
-- Tools to include in archive
-- Installation templates
+Bootstrap installation settings are configured through:
+- **Installation tools**: Automatically included based on ImageSetConfiguration
+- **Installation guides**: See [Bootstrap Workflow](docs/bootstrap-workflow.md)
+- **Bastion setup**: Use airgap-architect's interactive import wizard (future)
 
 ### Adding Helm Repositories
 

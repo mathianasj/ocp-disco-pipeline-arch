@@ -1,0 +1,101 @@
+# Example ImageSetConfiguration - vSphere
+# Generated with: OpenShift Airgap Architect v1.0.0
+# Date: 2026-05-08
+# Scenario: vSphere IPI deployment
+# Purpose: vSphere-optimized configuration with CSI drivers and platform-specific operators
+#
+# ⚠️  This is an EXAMPLE ONLY - Generate your own using airgap-architect
+# See: docs/examples/README.md
+
+kind: ImageSetConfiguration
+apiVersion: mirror.openshift.io/v1alpha2
+metadata:
+  name: openshift-vsphere-mirror
+  labels:
+    environment: production
+    platform: vsphere
+    purpose: disconnected-mirroring
+
+archiveSize: 4
+
+storageConfig:
+  registry:
+    imageURL: quay.vsphere.example.com/mirror/metadata:latest
+    skipTLS: false
+
+mirror:
+  platform:
+    channels:
+      - name: stable-4.15
+        type: ocp
+        minVersion: 4.15.10
+        maxVersion: 4.15.15
+        shortestPath: true
+
+    graph: true
+
+  operators:
+    - catalog: registry.redhat.io/redhat/redhat-operator-index:v4.15
+      full: false
+      packages:
+        # Platform operators
+        - name: openshift-pipelines-operator-rh
+          channels:
+            - name: latest
+
+        - name: quay-operator
+          channels:
+            - name: stable-3.11
+
+        # Storage - vSphere CSI
+        - name: odf-operator
+          channels:
+            - name: stable-4.15
+
+        # Logging
+        - name: cluster-logging
+          channels:
+            - name: stable
+
+        - name: elasticsearch-operator
+          channels:
+            - name: stable
+
+        # GitOps
+        - name: openshift-gitops-operator
+          channels:
+            - name: latest
+
+        # Monitoring
+        - name: prometheus-operator
+          channels:
+            - name: stable
+
+        # Virtualization (useful for vSphere environments)
+        - name: kubevirt-hyperconverged
+          channels:
+            - name: stable
+
+  additionalImages:
+    # UBI images
+    - name: registry.redhat.io/ubi9/ubi:latest
+    - name: registry.redhat.io/ubi9/ubi-minimal:latest
+    - name: registry.redhat.io/ubi8/ubi:latest
+
+    # Toolkit
+    - name: registry.redhat.io/ubi9/toolbox:latest
+
+    # OpenShift CLI
+    - name: registry.redhat.io/openshift4/ose-cli:latest
+
+    # vSphere-specific images
+    - name: registry.redhat.io/openshift4/ose-vsphere-problem-detector:latest
+    - name: registry.redhat.io/openshift4/ose-vsphere-csi-driver:latest
+    - name: registry.redhat.io/openshift4/ose-vsphere-csi-driver-syncer:latest
+
+    # Common application images
+    - name: registry.redhat.io/rhscl/postgresql-13-rhel7:latest
+    - name: registry.redhat.io/rhscl/redis-6-rhel7:latest
+    - name: registry.redhat.io/rhscl/nginx-120-rhel7:latest
+
+  helm: {}

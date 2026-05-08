@@ -5,10 +5,30 @@ metadata:
   labels:
     app: disconnected-mirror-pipeline
     component: image-collection
+  annotations:
+    description: Automated oc-mirror execution for recurring artifact collections
+    related-tools: openshift-airgap-architect
 spec:
   description: |
     Collects OpenShift platform images, operator catalogs, and additional images
     using oc-mirror tool with ImageSetConfiguration.
+
+    This task AUTOMATES what OpenShift Airgap Architect does interactively.
+
+    Relationship to Airgap-Architect:
+    - Airgap-Architect: Interactive wizard for config generation and one-off executions
+    - This Task: Automated execution for scheduled recurring collections
+
+    Configuration Source:
+    - ImageSetConfiguration should be generated using OpenShift Airgap Architect
+    - See: https://github.com/bstrauss84/openshift-airgap-architect/
+    - Do NOT use manually-created static configurations
+    - See docs/examples/ for reference configurations
+
+    Use Cases:
+    - Demonstrations: Use airgap-architect UI to show users the interactive workflow
+    - Production: Use this task for automated scheduled collections
+    - Testing: Generate configs with airgap-architect, validate with this task
 
   params:
     - name: config-path

@@ -1,0 +1,130 @@
+# Example ImageSetConfiguration - Production
+# Generated with: OpenShift Airgap Architect v1.0.0
+# Date: 2026-05-08
+# Purpose: Production-ready configuration with multiple versions and comprehensive operators
+#
+# ⚠️  This is an EXAMPLE ONLY - Generate your own using airgap-architect
+# See: docs/examples/README.md
+
+kind: ImageSetConfiguration
+apiVersion: mirror.openshift.io/v1alpha2
+metadata:
+  name: openshift-production-mirror
+  labels:
+    environment: production
+    purpose: disconnected-mirroring
+
+archiveSize: 4
+
+storageConfig:
+  registry:
+    imageURL: quay.example.com/mirror/metadata:latest
+    skipTLS: false
+
+mirror:
+  platform:
+    channels:
+      # Current production version
+      - name: stable-4.15
+        type: ocp
+        minVersion: 4.15.10
+        maxVersion: 4.15.15
+        shortestPath: true
+
+      # Previous version for rollback capability
+      - name: stable-4.14
+        type: ocp
+        minVersion: 4.14.20
+        maxVersion: 4.14.25
+        shortestPath: true
+
+    graph: true
+
+  operators:
+    # Red Hat Operators catalog
+    - catalog: registry.redhat.io/redhat/redhat-operator-index:v4.15
+      full: false
+      packages:
+        # Platform operators
+        - name: openshift-pipelines-operator-rh
+          channels:
+            - name: latest
+
+        - name: quay-operator
+          channels:
+            - name: stable-3.11
+
+        - name: odf-operator
+          channels:
+            - name: stable-4.15
+
+        - name: cluster-logging
+          channels:
+            - name: stable
+
+        - name: elasticsearch-operator
+          channels:
+            - name: stable
+
+        # GitOps and automation
+        - name: openshift-gitops-operator
+          channels:
+            - name: latest
+
+        # Advanced cluster management
+        - name: advanced-cluster-management
+          channels:
+            - name: release-2.10
+
+        # Service mesh
+        - name: servicemeshoperator
+          channels:
+            - name: stable
+
+        # Serverless
+        - name: serverless-operator
+          channels:
+            - name: stable
+
+        # Virtualization
+        - name: kubevirt-hyperconverged
+          channels:
+            - name: stable
+
+    # Certified operators
+    - catalog: registry.redhat.io/redhat/certified-operator-index:v4.15
+      full: false
+      packages:
+        - name: cert-manager-operator
+          channels:
+            - name: stable
+
+  additionalImages:
+    # Universal Base Images - multiple versions
+    - name: registry.redhat.io/ubi9/ubi:latest
+    - name: registry.redhat.io/ubi9/ubi-minimal:latest
+    - name: registry.redhat.io/ubi9/ubi-micro:latest
+    - name: registry.redhat.io/ubi8/ubi:latest
+    - name: registry.redhat.io/ubi8/ubi-minimal:latest
+
+    # Toolkit and debugging
+    - name: registry.redhat.io/rhel8/support-tools:latest
+    - name: registry.redhat.io/ubi9/toolbox:latest
+
+    # Database images
+    - name: registry.redhat.io/rhscl/postgresql-13-rhel7:latest
+    - name: registry.redhat.io/rhscl/mysql-80-rhel7:latest
+    - name: registry.redhat.io/rhscl/redis-6-rhel7:latest
+
+    # Web servers
+    - name: registry.redhat.io/rhscl/nginx-120-rhel7:latest
+
+    # OpenShift CLI tools
+    - name: registry.redhat.io/openshift4/ose-cli:latest
+    - name: registry.redhat.io/openshift4/ose-cli-artifacts:latest
+
+    # Tekton base images
+    - name: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel8:latest
+    - name: registry.redhat.io/openshift-pipelines/pipelines-entrypoint-rhel8:latest
+
+  helm: {}

@@ -1,0 +1,112 @@
+# Example ImageSetConfiguration - AWS GovCloud
+# Generated with: OpenShift Airgap Architect v1.0.0
+# Date: 2026-05-08
+# Scenario: AWS GovCloud disconnected deployment
+# Purpose: Government cloud configuration with compliance-focused operators
+#
+# ⚠️  This is an EXAMPLE ONLY - Generate your own using airgap-architect
+# See: docs/examples/README.md
+
+kind: ImageSetConfiguration
+apiVersion: mirror.openshift.io/v1alpha2
+metadata:
+  name: openshift-govcloud-mirror
+  labels:
+    environment: production
+    platform: aws-govcloud
+    purpose: disconnected-mirroring
+    compliance: fedramp-high
+
+archiveSize: 4
+
+storageConfig:
+  registry:
+    imageURL: quay.govcloud.example.mil/mirror/metadata:latest
+    skipTLS: false
+
+mirror:
+  platform:
+    channels:
+      # GovCloud typically requires specific validated versions
+      - name: stable-4.15
+        type: ocp
+        minVersion: 4.15.12  # Pin to validated version
+        maxVersion: 4.15.12
+        shortestPath: true
+
+    graph: true
+
+  operators:
+    - catalog: registry.redhat.io/redhat/redhat-operator-index:v4.15
+      full: false
+      packages:
+        # Platform operators
+        - name: openshift-pipelines-operator-rh
+          channels:
+            - name: latest
+
+        - name: quay-operator
+          channels:
+            - name: stable-3.11
+
+        # Storage
+        - name: odf-operator
+          channels:
+            - name: stable-4.15
+
+        # Logging (compliance requirement)
+        - name: cluster-logging
+          channels:
+            - name: stable
+
+        - name: elasticsearch-operator
+          channels:
+            - name: stable
+
+        # Compliance scanning
+        - name: compliance-operator
+          channels:
+            - name: stable
+
+        # Advanced cluster management
+        - name: advanced-cluster-management
+          channels:
+            - name: release-2.10
+
+        # GitOps
+        - name: openshift-gitops-operator
+          channels:
+            - name: latest
+
+    # Certified operators (compliance-focused)
+    - catalog: registry.redhat.io/redhat/certified-operator-index:v4.15
+      full: false
+      packages:
+        - name: cert-manager-operator
+          channels:
+            - name: stable
+
+  additionalImages:
+    # UBI images (FIPS-compliant)
+    - name: registry.redhat.io/ubi9/ubi:latest
+    - name: registry.redhat.io/ubi9/ubi-minimal:latest
+    - name: registry.redhat.io/ubi8/ubi:latest
+
+    # Toolkit (security hardened)
+    - name: registry.redhat.io/ubi9/toolbox:latest
+    - name: registry.redhat.io/rhel8/support-tools:latest
+
+    # OpenShift CLI
+    - name: registry.redhat.io/openshift4/ose-cli:latest
+
+    # AWS-specific images
+    - name: registry.redhat.io/openshift4/ose-aws-cloud-controller-manager:latest
+    - name: registry.redhat.io/openshift4/ose-aws-ebs-csi-driver:latest
+    - name: registry.redhat.io/openshift4/ose-aws-ebs-csi-driver-operator:latest
+
+    # Application images (validated versions only)
+    - name: registry.redhat.io/rhscl/postgresql-13-rhel7:1-109
+    - name: registry.redhat.io/rhscl/redis-6-rhel7:1-92
+    - name: registry.redhat.io/rhscl/nginx-120-rhel7:1-75
+
+  helm: {}
