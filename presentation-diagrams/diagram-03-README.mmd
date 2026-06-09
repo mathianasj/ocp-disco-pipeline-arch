@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph phase1["Phase 1: Collection (Connected Cluster)"]
+        direction TB
+        cdn["Red Hat CDN<br/>registry.redhat.io"]
+        config["Generate Config<br/>(airgap-architect)"]
+        collect["Run Collection Pipeline<br/>(Tekton)"]
+        package["Package Archive<br/>(versioned, checksummed)"]
+        
+        config --> collect
+        cdn --> collect
+        collect --> package
+    end
+    
+    subgraph phase2["Phase 2: Transport"]
+        direction TB
+        media["Physical Media<br/>(encrypted USB)"]
+        custody["Chain of Custody<br/>Tracking"]
+        
+        custody --> media
+    end
+    
+    subgraph phase3["Phase 3: Import (Disconnected)"]
+        direction TB
+        verify["Verify Checksums"]
+        import["Import to Registry<br/>(oc-mirror)"]
+        bootstrap["Bootstrap New Cluster<br/>OR<br/>Update Existing Cluster"]
+        
+        verify --> import
+        import --> bootstrap
+    end
+    
+    package --> phase2
+    media --> phase3
+    
+    style phase1 fill:#e1f5ff
+    style phase2 fill:#f0f0f0
+    style phase3 fill:#fff4e1

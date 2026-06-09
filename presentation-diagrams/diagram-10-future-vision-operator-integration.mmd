@@ -1,0 +1,49 @@
+graph TB
+    subgraph "Unified Operator"
+        OP[Disconnected Platform Operator]
+        UI[Adaptive Web UI]
+        CTRL[Controller Manager]
+    end
+
+    subgraph "Connected Cluster Components"
+        AAC[Airgap-Architect Config Gen]
+        PIPELINE[Tekton Collection Pipeline]
+        GITOPS[ArgoCD/GitOps]
+        STORAGE[Artifact Storage PVC]
+    end
+
+    subgraph "Airgapped Management Cluster Components"
+        AAA[Airgap-Architect Import UI]
+        BOOTSTRAP[Cluster Bootstrap Controller]
+        IMPORT[Import Pipeline]
+        REGISTRY[Mirror Registry]
+    end
+
+    subgraph "Deployment Targets"
+        CLUSTER1[Disconnected Cluster 1]
+        CLUSTER2[Disconnected Cluster 2]
+        CLUSTERN[Disconnected Cluster N]
+    end
+
+    OP --> UI
+    OP --> CTRL
+    
+    CTRL -->|Connected Mode| AAC
+    CTRL -->|Connected Mode| PIPELINE
+    CTRL -->|Connected Mode| GITOPS
+    
+    CTRL -->|Airgapped Mode| AAA
+    CTRL -->|Airgapped Mode| BOOTSTRAP
+    CTRL -->|Airgapped Mode| IMPORT
+    
+    AAC --> PIPELINE
+    PIPELINE --> STORAGE
+    GITOPS --> PIPELINE
+    
+    AAA --> IMPORT
+    IMPORT --> REGISTRY
+    BOOTSTRAP --> CLUSTER1
+    BOOTSTRAP --> CLUSTER2
+    BOOTSTRAP --> CLUSTERN
+    
+    STORAGE -.Physical Media.-> IMPORT

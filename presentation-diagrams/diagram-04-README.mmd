@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph connected["CONNECTED CLUSTER"]
+        direction TB
+        cdn["Red Hat CDN & APIs"]
+        aa["Airgap-Architect<br/>Config Wizard"]
+        pipeline["Collection Pipeline<br/>• oc-mirror<br/>• Helm charts<br/>• Operator catalogs<br/>• Bootstrap tools"]
+        registry["Mirror Registry<br/>(Quay)"]
+        packaging["Packaging<br/>• Versioning<br/>• Checksums<br/>• Manifests"]
+        archive["Versioned Archive<br/>v2026.05.06.001.tar.gz"]
+        
+        aa -->|imageset-config.yaml| pipeline
+        cdn --> pipeline
+        pipeline --> registry
+        registry --> packaging
+        packaging --> archive
+    end
+    
+    media["📀 Physical Media<br/>Encrypted USB Drive<br/>Chain of Custody"]
+    
+    subgraph disconnected["DISCONNECTED ENVIRONMENT"]
+        direction TB
+        bastion["Bastion Node<br/>OR<br/>Existing Cluster"]
+        import["Import Pipeline<br/>• Checksum verify<br/>• oc-mirror import<br/>• Registry population"]
+        localreg["Local Mirror Registry<br/>(Quay)"]
+        deploy["Deploy<br/>Bootstrap New Cluster<br/>OR<br/>Update Existing"]
+        
+        bastion --> import
+        import --> localreg
+        localreg --> deploy
+    end
+    
+    archive --> media
+    media --> bastion
+    
+    style connected fill:#e1f5ff
+    style disconnected fill:#fff4e1
+    style media fill:#f0f0f0

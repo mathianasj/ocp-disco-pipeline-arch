@@ -1,0 +1,35 @@
+sequenceDiagram
+    participant AA as Airgap-Architect
+    participant C as Connected Cluster
+    participant M as Physical Media
+    participant D as Disconnected Bastion
+    participant N as New Cluster
+
+    Note over AA: Phase 1: Configuration
+    AA->>AA: Generate imageset-config.yaml
+    AA->>C: Provide configuration
+
+    Note over C: Phase 2: Collection
+    C->>C: Run Tekton pipeline
+    C->>C: Collect images with oc-mirror
+    C->>C: Package Helm charts
+    C->>C: Generate manifests
+    C->>C: Create checksummed archive
+    
+    Note over C,M: Phase 3: Transfer
+    C->>M: Export archive to USB
+    M->>M: Physical transport
+    M->>D: Copy to bastion
+    
+    Note over D: Phase 4: Import
+    D->>D: Verify checksums
+    D->>D: Install mirror-registry
+    D->>D: Import with oc-mirror
+    D->>D: Populate local registry
+    
+    Note over D,N: Phase 5: Bootstrap
+    D->>D: Extract openshift-install
+    D->>D: Generate install-config.yaml
+    D->>N: Create cluster
+    N->>N: Pull from bastion registry
+    N->>D: Installation complete

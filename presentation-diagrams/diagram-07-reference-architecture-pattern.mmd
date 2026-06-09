@@ -1,0 +1,21 @@
+graph TB
+    subgraph "Community/Educational"
+        REF[Reference Architecture Repository<br/>Examples, Patterns, Learning]
+    end
+    
+    subgraph "Production"
+        PROD[Production Operator Repository<br/>Versioned, Supported, Released]
+    end
+    
+    subgraph "Upstream"
+        UP[Upstream Tool Repository<br/>Enhanced for Integration]
+    end
+    
+    REF -.Patterns & Examples.-> PROD
+    REF -.Documentation References.-> PROD
+    UP -->|Embedded/Integrated| PROD
+    REF -.Contributions.-> UP
+    
+    style REF fill:#fff4e1
+    style PROD fill:#e1ffe1
+    style UP fill:#e1f5ff

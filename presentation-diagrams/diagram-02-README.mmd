@@ -1,0 +1,20 @@
+graph TB
+    subgraph "1️⃣ Reference Repository"
+        REF["disconnected-mirror-pipeline<br/>(THIS REPO)<br/><br/>• Patterns & Examples<br/>• Architecture Docs<br/>• Learning Resource"]
+    end
+    
+    subgraph "2️⃣ Production Operator"
+        PROD["disconnected-platform-operator<br/>(SEPARATE REPO - Future)<br/><br/>• Production Code<br/>• Versioned Releases<br/>• Supported Product"]
+    end
+    
+    subgraph "3️⃣ Enhanced Upstream Tool"
+        UP["openshift-airgap-architect<br/>(UPSTREAM/FORK)<br/><br/>• Config Wizard<br/>• oc-mirror Integration<br/>• UI-Driven Workflows"]
+    end
+    
+    REF -->|"Patterns<br/>Guide"| PROD
+    UP -->|"Embedded<br/>in"| PROD
+    REF -.->|"Contributes<br/>to"| UP
+    
+    style REF fill:#fff4e1
+    style PROD fill:#e1ffe1
+    style UP fill:#e1f5ff

@@ -1,0 +1,30 @@
+graph TB
+    subgraph "Upstream Open Source"
+        AA[openshift-airgap-architect<br/>by @bstrauss84]
+    end
+    
+    subgraph "Reference Architecture"
+        REF[disconnected-mirror-pipeline<br/>THIS REPO]
+    end
+    
+    subgraph "Production Operator"
+        OP[disconnected-platform-operator<br/>NEW REPO]
+        CTRL[Operator Controllers]
+        WEB[Embedded Airgap-Architect]
+        PIPE[Managed Tekton Pipelines]
+    end
+    
+    AA -->|Contributes to| AA
+    AA -->|Embedded in| WEB
+    REF -->|Patterns & Examples| OP
+    REF -->|Referenced by Docs| OP
+    
+    OP --> CTRL
+    OP --> WEB
+    OP --> PIPE
+    
+    PIPE -.Implements patterns from.-> REF
+    
+    style AA fill:#e1f5ff
+    style REF fill:#fff4e1
+    style OP fill:#e1ffe1

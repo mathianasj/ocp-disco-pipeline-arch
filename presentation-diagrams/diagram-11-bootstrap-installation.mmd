@@ -1,0 +1,17 @@
+sequenceDiagram
+    participant Archive as Archive Package
+    participant Bastion as Bastion Node
+    participant Registry as Mirror Registry
+    participant Installer as OpenShift Installer
+    participant Cluster as New Cluster Nodes
+
+    Archive->>Bastion: 1. Transfer via physical media
+    Bastion->>Bastion: 2. Extract archive & verify checksums
+    Bastion->>Registry: 3. Install mirror-registry (Quay)
+    Bastion->>Registry: 4. Import all images (oc-mirror)
+    Bastion->>Installer: 5. Extract openshift-install binary
+    Installer->>Installer: 6. Create install-config.yaml
+    Installer->>Cluster: 7. Bootstrap cluster nodes
+    Cluster->>Registry: 8. Pull images during install
+    Cluster->>Cluster: 9. Form OpenShift cluster
+    Note over Cluster: OpenShift Cluster Running!

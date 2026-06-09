@@ -1,0 +1,14 @@
+graph LR
+    DEV[Developer]
+    REF[Reference Repo<br/>disconnected-mirror-pipeline]
+    OP[Operator Repo<br/>disconnected-platform-operator]
+    AA[Airgap-Architect<br/>upstream]
+    
+    DEV -->|New pattern| REF
+    REF -.Document & Example.-> OP
+    DEV -->|Implement in Go| OP
+    OP -.References docs.-> REF
+    
+    DEV -->|Propose feature| AA
+    AA -->|Accepted PR| AA
+    AA -->|Update submodule| OP
